@@ -1,29 +1,28 @@
 (ns summerfest.sse
-  (:require [cheshire.core :as json]))
+  (:require [cheshire.core :as json]
+            [clojure.string :as str]))
 
 (defn- sse-event [event-type data-lines]
-  (str "event: " event-type "\n"
-       (->> data-lines
-            (map #(str "data: " %))
-            (clojure.string/join "\n"))
-       "\n\n"))
+  (clojure.core/str "event: " event-type "\n"
+                    (->> data-lines
+                         (map #(clojure.core/str "data: " %))
+                         (str/join "\n"))
+                    "\n\n"))
 
-(defn merge-fragments
-  "Build a datastar-merge-fragments SSE event from pre-rendered HTML strings."
+(defn patch-elements
+  "Build a datastar-patch-elements SSE event from pre-rendered HTML strings.
+   Each line of HTML gets its own 'data: elements ...' line."
   [& html-strings]
-  (let [html (apply str html-strings)]
-    (sse-event "datastar-merge-fragments" [(str "fragments " html)])))
+  (let [html (apply clojure.core/str html-strings)
+        lines (str/split-lines html)]
+    (sse-event "datastar-patch-elements"
+               (map #(clojure.core/str "elements " %) lines))))
 
-(defn merge-signals
-  "Build a datastar-merge-signals SSE event from a map."
+(defn patch-signals
+  "Build a datastar-patch-signals SSE event from a map."
   [signals-map]
-  (sse-event "datastar-merge-signals"
-             [(str "signals " (json/generate-string signals-map))]))
-
-(defn execute-script
-  "Build a datastar-execute-script SSE event."
-  [script]
-  (sse-event "datastar-execute-script" [(str "script " script)]))
+  (sse-event "datastar-patch-signals"
+             [(clojure.core/str "signals " (json/generate-string signals-map))]))
 
 (defn sse-response
   "Ring response with SSE content type. Pass SSE event strings."
@@ -31,4 +30,4 @@
   {:status 200
    :headers {"Content-Type" "text/event-stream"
              "Cache-Control" "no-cache"}
-   :body (apply str events)})
+   :body (apply clojure.core/str events)})

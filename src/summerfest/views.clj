@@ -1,7 +1,52 @@
 (ns summerfest.views
   (:require [hiccup.core :as h]
             [hiccup.page :as page]
-            [summerfest.i18n :refer [t]]))
+            [clojure.string :as str]
+            [summerfest.db :as db]
+            [summerfest.i18n :refer [t]]
+            [summerfest.config :refer [u base-path]]))
+
+(defn- js-string-escape
+  "Escape a string for embedding inside a single-quoted JS literal in data-signals."
+  [s]
+  (-> (or s "")
+      (str/replace "\\" "\\\\")
+      (str/replace "'" "\\'")
+      (str/replace "\n" "\\n")
+      (str/replace "\r" "\\r")))
+
+(defn nav-user-html
+  "Clickable navbar greeting that opens the display-name modal."
+  [locale user]
+  (h/html
+   [:span#nav-user.nav-user
+    {:role "button"
+     :tabindex "0"
+     :title (t locale :profile/edit-name-hint)
+     "data-on:click" "$showNameEdit = true"}
+    (t locale :nav/hi (db/effective-name user))
+    [:span.nav-user-edit-icon {:aria-hidden "true"} " ✎"]]))
+
+(defn- name-modal-html [locale user]
+  (h/html
+   [:div.modal-overlay {"data-class" "{open: $showNameEdit}"
+                        "data-on:click" "$showNameEdit = false"}
+    [:div.modal {"data-on:click" "evt.stopPropagation()"}
+     [:h3 (t locale :profile/edit-name)]
+     [:input.modal-input
+      {:type "text"
+       "data-bind" "newDisplayName"
+       :placeholder (t locale :profile/name-placeholder)
+       :maxlength "30"
+       "data-on:keydown" (str "evt.key === 'Enter' && @post('"
+                              (u "/api/profile/display-name") "')")}]
+     [:div.modal-actions
+      [:button.btn.btn-no
+       {"data-on:click" "$showNameEdit = false"}
+       (t locale :profile/cancel)]
+      [:button.btn.btn-save
+       {"data-on:click" (str "@post('" (u "/api/profile/display-name") "')")}
+       (t locale :profile/save)]]]]))
 
 (defn layout
   "Base page layout with navbar. ctx is {:user ... :locale ...}."
@@ -13,26 +58,47 @@
       [:meta {:charset "utf-8"}]
       [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
       [:title (str title " | " (t locale :nav/brand))]
-      [:link {:rel "stylesheet" :href "/style.css"}]
-      [:link {:rel "icon" :href "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌻</text></svg>"}]
-      [:script {:type "module" :src "https://cdn.jsdelivr.net/npm/@starfederation/datastar"}]]
+      [:link {:rel "stylesheet" :href (u "/style.css")}]
+      [:link {:rel "icon" :href "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>S</text></svg>"}]
+      [:script (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";")]
+      [:script {:type "module" :src "https://cdn.jsdelivr.net/gh/starfederation/datastar/bundles/datastar.js"}]]
      [:body
+      (when user
+        {:data-signals (str "{showNameEdit:false,newDisplayName:'"
+                            (js-string-escape (db/effective-name user))
+                            "'}")})
       [:nav.navbar
-       [:a.nav-brand {:href "/"} (t locale :nav/brand)]
+       [:a.nav-brand {:href (u "/")} (t locale :nav/brand)]
        [:input#nav-toggle {:type "checkbox"}]
        [:label.nav-toggle {:for "nav-toggle"} "☰"]
        [:div.nav-links
-        [:a {:href "/"} (t locale :nav/home)]
-        [:a {:href "/contact"} (t locale :nav/contact)]
-        [:a {:href "/directions"} (t locale :nav/directions)]
-        [:a {:href "/gallery"} (t locale :nav/gallery)]
-        [:a {:href "/chat"} (t locale :nav/chat)]
+        [:a {:href (u "/")} (t locale :nav/home)]
+        ;; [:a {:href (u "/contact")} (t locale :nav/contact)]
+        ;; [:a {:href (u "/directions")} (t locale :nav/directions)]
+        [:a {:href (u "/gallery")} (t locale :nav/gallery)]
+        [:a {:href (u "/chat")} (t locale :nav/chat)]
+        [:a {:href (u "/party")} (t locale :nav/party)]
         (when user
-          [:span.nav-user (t locale :nav/hi (:name user))])
-        [:a.lang-switch {:href (str "/set-locale?locale=" (name other-locale))} other-label]]]
+          (nav-user-html locale user))
+        [:a.lang-switch {:href (u (str "/set-locale?locale=" (name other-locale)))} other-label]]]
       [:main.container body]
+      (when user (name-modal-html locale user))
       [:footer
-       [:p (t locale :footer/text)]]])))
+       [:p [:a {:href (u "/impressum")} (t locale :footer/text)]]]])))
+
+;; --- Party game layout (fullscreen, no nav) ---
+
+(defn party-layout
+  "Minimal fullscreen layout for party game pages."
+  [title locale mode & body]
+  (page/html5
+   [:head
+    [:meta {:charset "utf-8"}]
+    [:meta {:name "viewport" :content "width=device-width, initial-scale=1, user-scalable=no"}]
+    [:title (str title " | " (t locale :nav/brand))]
+    [:link {:rel "stylesheet" :href (u "/style.css")}]
+    [:script (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";")]]
+   [:body {:data-party-mode mode} body]))
 
 (defn login-page [locale]
   (page/html5
@@ -40,7 +106,8 @@
     [:meta {:charset "utf-8"}]
     [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
     [:title (t locale :login/title)]
-    [:link {:rel "stylesheet" :href "/style.css"}]]
+    [:link {:rel "stylesheet" :href (u "/style.css")}]
+    [:script (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";")]]
    [:body
     [:main.container.center
      [:div.card.login-card
@@ -54,7 +121,8 @@
     [:meta {:charset "utf-8"}]
     [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
     [:title (t locale :login/invalid-title)]
-    [:link {:rel "stylesheet" :href "/style.css"}]]
+    [:link {:rel "stylesheet" :href (u "/style.css")}]
+    [:script (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";")]]
    [:body
     [:main.container.center
      [:div.card.login-card
@@ -65,7 +133,9 @@
 ;; --- RSVP ---
 
 (defn rsvp-fragment [locale user rsvp]
-  (let [group? (> (or (:group-size user) 2) 1)]
+  (let [group? (> (or (:group-size user) 2) 1)
+        yes-class (str "btn btn-yes" (when (and rsvp (:attending rsvp)) " active"))
+        no-class (str "btn btn-no" (when (and rsvp (not (:attending rsvp))) " active"))]
     (h/html
      [:div#rsvp-form.card
       [:h2 (t locale :rsvp/heading)]
@@ -75,23 +145,21 @@
            [:p.status-yes (t locale (if group? :rsvp/status-yes-group :rsvp/status-yes-solo))]
            [:p.status-no (t locale :rsvp/status-no)])])
       [:div.rsvp-buttons
-       [:button.btn.btn-yes
-        {:data-on-click (str "$attending = true; @post('/api/rsvp')")
-         :class (when (and rsvp (:attending rsvp)) "active")}
+       [:button {:class yes-class
+                 "data-on:click" (str "$attending = true; @post('" (u "/api/rsvp") "')")}
         (t locale (if group? :rsvp/we-coming :rsvp/i-coming))]
-       [:button.btn.btn-no
-        {:data-on-click (str "$attending = false; @post('/api/rsvp')")
-         :class (when (and rsvp (not (:attending rsvp))) "active")}
+       [:button {:class no-class
+                 "data-on:click" (str "$attending = false; @post('" (u "/api/rsvp") "')")}
         (t locale (if group? :rsvp/we-not-coming :rsvp/i-not-coming))]]
       [:div.info-section
        [:label {:for "additional-info"} (t locale :rsvp/info-label)]
        [:textarea#additional-info
-        {:data-model "additionalInfo"
+        {"data-bind" "additionalInfo"
          :placeholder (t locale :rsvp/info-placeholder)
          :rows "3"}
         (or (:additional-info rsvp) "")]
        [:button.btn.btn-save
-        {:data-on-click "@post('/api/rsvp/info')"}
+        {"data-on:click" (str "@post('" (u "/api/rsvp/info") "')")}
         (t locale :rsvp/save)]]])))
 
 (defn home-page [ctx rsvp]
@@ -99,7 +167,7 @@
     (layout (t locale :nav/home) ctx
             [:div.hero
              [:h1 (t locale :home/title)]
-             [:p.subtitle (t locale :home/subtitle (:name user))]]
+             [:p.subtitle (t locale :home/subtitle (db/effective-name user))]]
             [:div {:id "rsvp-section"
                    :data-signals (str "{attending: "
                                       (if rsvp (str (:attending rsvp)) "null")
@@ -108,6 +176,21 @@
                                           (.replace "'" "\\'"))
                                       "'}")}
              (rsvp-fragment locale user rsvp)])))
+
+;; --- Impressum ---
+
+(defn impressum-page [ctx]
+  (let [locale (:locale ctx)]
+    (layout (t locale :impressum/title) ctx
+            [:div.card
+             [:h1 (t locale :impressum/title)]
+             [:h3 (t locale :impressum/responsible)]
+             [:p (t locale :impressum/name) [:br]
+              (t locale :impressum/address)]
+             [:h3 (t locale :impressum/contact)]
+             [:p (t locale :contact/email) ": "
+              [:a {:href "mailto:fest@example.com"} "fest@example.com"]]
+             [:p.small (t locale :impressum/disclaimer)]])))
 
 ;; --- Contact ---
 
@@ -118,9 +201,9 @@
              [:h1 (t locale :contact/title)]
              [:p (t locale :contact/intro)]
              [:div.contact-info
-              [:p "📧 " (t locale :contact/email) ": " [:a {:href "mailto:fest@example.com"} "fest@example.com"]]
-              [:p "📱 " (t locale :contact/phone) ": " [:a {:href "tel:+491234567890"} "+49 123 456 7890"]]
-              [:p (t locale :contact/or-chat) [:a {:href "/chat"} (t locale :contact/chat-link)] "!"]]])))
+              [:p (t locale :contact/email) ": " [:a {:href "mailto:fest@example.com"} "fest@example.com"]]
+              [:p (t locale :contact/phone) ": " [:a {:href "tel:+491234567890"} "+49 123 456 7890"]]
+              [:p (t locale :contact/or-chat) [:a {:href (u "/chat")} (t locale :contact/chat-link)] "!"]]])))
 
 ;; --- Directions ---
 
@@ -148,52 +231,200 @@
     (if (seq photos)
       (for [photo photos]
         [:div.photo-card
-         [:img {:src (str "/uploads/" (:filename photo))
+         [:img {:src (u (str "/uploads/" (:filename photo)))
                 :alt (or (:original-name photo) "Photo")
                 :loading "lazy"}]
-         [:p.photo-meta (str (:user-name photo))]])
+         [:p.photo-meta (t locale :gallery/uploaded-by (:user-name photo))]])
       [:p.empty (t locale :gallery/empty)])]))
 
-(defn gallery-page [ctx photos]
+(defn gallery-page [ctx photos full?]
   (let [locale (:locale ctx)]
     (layout (t locale :gallery/title) ctx
             [:div.card
              [:h1 (t locale :gallery/title)]
-             [:form.upload-form {:id "upload-form"
-                                 :action "/api/photo"
-                                 :method "post"
-                                 :enctype "multipart/form-data"}
-              [:label.file-label {:for "photo-file"} (t locale :gallery/choose)]
-              [:input#photo-file {:type "file" :name "photo" :accept "image/*"}]
-              [:button.btn.btn-save {:type "submit"} (t locale :gallery/upload)]]]
-            (photo-grid locale photos))))
+             (if full?
+               [:p.empty (t locale :gallery/full)]
+               [:form.upload-form {:id "upload-form"
+                                   :action (u "/api/photo")
+                                   :method "post"
+                                   :enctype "multipart/form-data"}
+                [:label.btn.btn-save.upload-trigger {:for "photo-file"}
+                 (t locale :gallery/upload)]
+                [:input#photo-file
+                 {:type "file" :name "photo" :accept "image/*" :required true
+                  :hidden true
+                  :onchange "this.form.submit()"}]])]
+            (photo-grid locale photos)
+            [:div#lightbox.lightbox {:role "dialog" :aria-modal "true" :hidden true}
+             [:button.lightbox-close {:type "button" :aria-label (t locale :gallery/close)} "×"]
+             [:button.lightbox-prev {:type "button" :aria-label (t locale :gallery/prev)} "‹"]
+             [:img#lightbox-img.lightbox-img {:alt ""}]
+             [:button.lightbox-next {:type "button" :aria-label (t locale :gallery/next)} "›"]]
+            [:script "
+(function(){
+  var box=document.getElementById('lightbox'),img=document.getElementById('lightbox-img');
+  if(!box||!img)return;
+  var grid=document.getElementById('photo-grid'),idx=-1,srcs=[];
+  function refresh(){srcs=Array.from(grid.querySelectorAll('.photo-card img')).map(function(i){return i.currentSrc||i.src})}
+  function show(i){if(!srcs.length)return;idx=(i+srcs.length)%srcs.length;img.src=srcs[idx]}
+  function open(i){refresh();show(i);box.hidden=false;document.body.style.overflow='hidden'}
+  function close(){box.hidden=true;img.removeAttribute('src');document.body.style.overflow=''}
+  if(grid){grid.addEventListener('click',function(e){
+    var card=e.target.closest('.photo-card');if(!card)return;
+    var cards=Array.from(grid.querySelectorAll('.photo-card'));
+    var i=cards.indexOf(card);if(i>=0)open(i)
+  })}
+  box.querySelector('.lightbox-close').addEventListener('click',close);
+  box.querySelector('.lightbox-prev').addEventListener('click',function(e){e.stopPropagation();show(idx-1)});
+  box.querySelector('.lightbox-next').addEventListener('click',function(e){e.stopPropagation();show(idx+1)});
+  box.addEventListener('click',function(e){if(e.target===box)close()});
+  img.addEventListener('click',function(e){
+    e.stopPropagation();
+    var fn=img.requestFullscreen||img.webkitRequestFullscreen;
+    var p=fn&&fn.call(img);
+    if(!p)window.open(img.src,'_blank','noopener');
+    else if(p.catch)p.catch(function(){window.open(img.src,'_blank','noopener')})
+  });
+  document.addEventListener('keydown',function(e){
+    if(box.hidden)return;
+    if(e.key==='Escape')close();
+    else if(e.key==='ArrowLeft')show(idx-1);
+    else if(e.key==='ArrowRight')show(idx+1)
+  });
+})();
+"])))
 
 ;; --- Chat ---
+
+(def ^:private time-fmt (java.time.format.DateTimeFormatter/ofPattern "HH:mm"))
+
+(defn- msg-html [locale msg current-user-id]
+  (let [own? (= (:user-id msg) current-user-id)
+        liked? (:liked-by-me msg)
+        pinned? (:pinned msg)
+        like-count (or (:like-count msg) 0)]
+    [:div.chat-msg {:id (str "msg-" (:id msg))
+                    :class (str (when own? "own") (when pinned? " pinned"))}
+     [:div.chat-msg-top
+      [:span.chat-author (:user-name msg)]
+      [:span.chat-time (.format time-fmt (.toLocalDateTime (:created-at msg)))]]
+     [:span.chat-text (:message msg)]
+     [:div.chat-msg-actions
+      [:button.chat-action {:class (when liked? "liked")
+                            "data-on:click" (str "@post('" (u "/api/chat/like") "?id=" (:id msg) "')")}
+       [:span.action-icon (if liked? "♥" "♡")]
+       (when (pos? like-count) [:span.action-count (str like-count)])]
+      [:button.chat-action {:class (when pinned? "is-pinned")
+                            "data-on:click" (if pinned?
+                                              (str "confirm('" (t locale :chat/confirm-unpin) "') && @post('"
+                                                   (u "/api/chat/pin") "?id=" (:id msg) "')")
+                                              (str "@post('" (u "/api/chat/pin") "?id=" (:id msg) "')"))}
+       [:span.action-icon (if pinned? "📌" "pin")]]]]))
 
 (defn chat-messages-html [locale messages current-user-id]
   (h/html
    [:div#chat-messages.chat-messages
     (if (seq messages)
       (for [msg messages]
-        [:div.chat-msg {:class (when (= (:user-id msg) current-user-id) "own")}
-         [:span.chat-author (:user-name msg)]
-         [:span.chat-text (:message msg)]
-         [:span.chat-time (.format (java.time.format.DateTimeFormatter/ofPattern "HH:mm")
-                                   (.toLocalDateTime (:created-at msg)))]])
+        (msg-html locale msg current-user-id))
       [:p.empty (t locale :chat/empty)])]))
 
-(defn chat-page [ctx messages]
+(defn pinned-messages-html [locale pinned-messages current-user-id]
+  (h/html
+   [:div#pinned-messages.pinned-messages
+    [:h3 (t locale :chat/pinned)]
+    (if (seq pinned-messages)
+      (for [msg pinned-messages]
+        [:div.pinned-item {:onclick (str "document.getElementById('msg-" (:id msg) "')?.scrollIntoView({behavior:'smooth',block:'center'})")}
+         [:span.pinned-author (:user-name msg)]
+         [:span.pinned-text (:message msg)]])
+      [:p.empty.small (t locale :chat/no-pins)])]))
+
+(defn chat-page [ctx messages pinned-messages]
   (let [{:keys [user locale]} ctx]
     (layout (t locale :chat/title) ctx
-            [:div.card.chat-card
-             [:h1 (t locale :chat/title)]
-             [:div {:id "chat-container"
-                    :data-signals "{chatMsg: ''}"}
+            [:div.chat-layout {"data-init" (str "@get('" (u "/api/chat/stream") "')")}
+             [:div.card.chat-card {:data-signals "{chatMsg: ''}"}
+              [:h1 (t locale :chat/title)]
               (chat-messages-html locale messages (:id user))
+              [:button#scroll-btn.scroll-to-bottom (t locale :chat/jump-to-latest)]
               [:div.chat-input
                [:input {:type "text"
-                        :data-model "chatMsg"
+                        "data-bind" "chatMsg"
                         :placeholder (t locale :chat/placeholder)
-                        :data-on-keydown.enter "@post('/api/chat/send')"}]
-               [:button.btn.btn-send {:data-on-click "@post('/api/chat/send')"} (t locale :chat/send)]]
-              [:script "setInterval(async()=>{try{const r=await fetch('/api/chat/messages-html');if(r.ok){document.getElementById('chat-messages').outerHTML=await r.text()}}catch(e){}},5000);"]]])))
+                        "data-on:keydown" (str "evt.key === 'Enter' && @post('" (u "/api/chat/send") "')")}]
+               [:button.btn.btn-send {"data-on:click" (str "@post('" (u "/api/chat/send") "')")} (t locale :chat/send)]]]
+             [:div.card.pinned-sidebar
+              (pinned-messages-html locale pinned-messages (:id user))]]
+            [:script "
+(function(){
+  var m=document.getElementById('chat-messages'),b=document.getElementById('scroll-btn'),us=false;
+  if(!m||!b)return;
+  m.scrollTop=m.scrollHeight;
+  m.addEventListener('scroll',function(){
+    var ab=m.scrollHeight-m.scrollTop-m.clientHeight<60;
+    us=!ab;b.classList.toggle('visible',us);
+  });
+  b.addEventListener('click',function(){m.scrollTo({top:m.scrollHeight,behavior:'smooth'})});
+  new MutationObserver(function(){if(!us){m.scrollTop=m.scrollHeight}}).observe(m,{childList:true,subtree:true});
+})();
+"])))
+
+;; --- Party Games ---
+
+(defn party-hub-page [ctx]
+  (let [locale (:locale ctx)]
+    (layout (t locale :party/title) ctx
+            [:div.hero
+             [:h1 (t locale :party/title)]
+             [:p.subtitle (t locale :party/subtitle)]]
+            [:div.party-grid
+             [:a.card.party-card {:href (u "/party/bump")}
+              [:div.party-icon "💥"]
+              [:h2 (t locale :party/bump-title)]
+              [:p (t locale :party/bump-desc)]]
+             [:a.card.party-card {:href (u "/party/room")}
+              [:div.party-icon "📱"]
+              [:h2 (t locale :party/room-title)]
+              [:p (t locale :party/room-desc)]]
+             [:a.card.party-card {:href (u "/party/radar")}
+              [:div.party-icon "🧭"]
+              [:h2 (t locale :party/radar-title)]
+              [:p (t locale :party/radar-desc)]]])))
+
+(defn- party-game-page
+  "Shared structure for all three party game modes."
+  [locale mode mode-title-key hint-key]
+  (party-layout (t locale mode-title-key) locale mode
+                [:div.party-page
+                 ;; Lobby — just name + join
+                 [:div#party-lobby.party-lobby
+                  [:a.party-back {:href (u "/party")} (str "← " (t locale :party/back))]
+                  [:h1 (t locale mode-title-key)]
+                  [:p.party-hint (t locale hint-key)]
+                  [:div.party-form
+                   [:input#player-name {:type "text"
+                                        :placeholder (t locale :party/your-name)
+                                        :autocomplete "given-name"
+                                        :maxlength "20"}]
+                   [:button.btn.btn-yes {:onclick "partyJoin()"
+                                         :style "width:100%"}
+                    (t locale :party/join)]]]
+                 ;; Game UI
+                 [:div#party-game.party-game {:style "display:none"}
+                  [:canvas#party-canvas]
+                  [:div.party-overlay
+                   [:div.party-info
+                    [:span (str (t locale :party/players) ": ")]
+                    [:span#player-count "0"]]
+                   [:div#party-chain.party-chain]]]
+                 [:script {:src (u "/party.js")}]]))
+
+(defn party-bump-page [locale]
+  (party-game-page locale "bump" :party/bump-title :party/bump-hint))
+
+(defn party-room-page [locale]
+  (party-game-page locale "room" :party/room-title :party/room-hint))
+
+(defn party-radar-page [locale]
+  (party-game-page locale "radar" :party/radar-title :party/radar-hint))

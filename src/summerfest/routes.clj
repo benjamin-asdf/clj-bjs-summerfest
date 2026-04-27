@@ -4,14 +4,19 @@
             [summerfest.sse :as sse]
             [summerfest.sheets :as sheets]
             [summerfest.i18n :as i18n]
+            [summerfest.config :refer [u]]
             [reitit.ring :as reitit]
             [ring.util.response :as resp]
             [cheshire.core :as json]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [org.httpkit.server :as hk])
   (:import [java.util UUID]))
 
 (def ^:private upload-dir
   (or (System/getenv "UPLOAD_DIR") "uploads"))
+
+(def ^:private max-photos
+  (parse-long (or (System/getenv "MAX_PHOTOS") "1000")))
 
 ;; --- Helpers ---
 
@@ -31,7 +36,7 @@
   (fn [req]
     (if-let [user (current-user req)]
       (handler (assoc req :user user))
-      (resp/redirect "/login"))))
+      (resp/redirect (u "/login")))))
 
 (defn- html-response [body]
   (-> (resp/response body)
@@ -44,12 +49,48 @@
         (when (seq s) (json/parse-string s true))))
     (catch Exception _ nil)))
 
+;; --- Chat SSE Stream ---
+
+(defonce chat-clients (atom {})) ;; {channel {:user-id id, :locale locale}}
+
+(defn- send-chat-state! [ch user-id locale]
+  (let [messages (db/get-recent-messages user-id)
+        pinned (db/get-pinned-messages user-id)]
+    (hk/send! ch
+              (str (sse/patch-elements (views/chat-messages-html locale messages user-id))
+                   (sse/patch-elements (views/pinned-messages-html locale pinned user-id)))
+              false)))
+
+(defn- broadcast-chat! []
+  (doseq [[ch {:keys [user-id locale]}] @chat-clients]
+    (try
+      (send-chat-state! ch user-id locale)
+      (catch Exception _
+        (swap! chat-clients dissoc ch)))))
+
+(defn chat-stream-handler [req]
+  (let [user (:user req)
+        locale (get-locale req)]
+    (hk/with-channel req ch
+      (swap! chat-clients assoc ch {:user-id (:id user) :locale locale})
+      (hk/on-close ch (fn [_] (swap! chat-clients dissoc ch)))
+      (let [messages (db/get-recent-messages (:id user))
+            pinned (db/get-pinned-messages (:id user))
+            initial (str (sse/patch-elements (views/chat-messages-html locale messages (:id user)))
+                         (sse/patch-elements (views/pinned-messages-html locale pinned (:id user))))]
+        (hk/send! ch {:status 200
+                      :headers {"Content-Type" "text/event-stream"
+                                "Cache-Control" "no-cache"
+                                "X-Accel-Buffering" "no"}
+                      :body initial}
+                  false)))))
+
 ;; --- Page Handlers ---
 
 (defn login-handler [req]
   (if-let [token (get-in req [:query-params "token"])]
     (if-let [user (db/get-user-by-token token)]
-      (-> (resp/redirect "/")
+      (-> (resp/redirect (u "/"))
           (assoc :session (merge (:session req) {:user-id (:id user)})))
       (html-response (views/invalid-token-page (get-locale req))))
     (html-response (views/login-page (get-locale req)))))
@@ -57,7 +98,7 @@
 (defn set-locale-handler [req]
   (let [locale (keyword (get-in req [:query-params "locale"] "de"))
         locale (if (#{:de :en} locale) locale :de)
-        referer (get-in req [:headers "referer"] "/")]
+        referer (get-in req [:headers "referer"] (u "/"))]
     (-> (resp/redirect referer)
         (assoc :session (merge (:session req) {:locale locale})))))
 
@@ -69,16 +110,26 @@
 (defn contact-handler [req]
   (html-response (views/contact-page (ctx req))))
 
+(defn impressum-handler [req]
+  (html-response (views/impressum-page (ctx req))))
+
 (defn directions-handler [req]
   (html-response (views/directions-page (ctx req))))
 
+(defn- photo-file-renderable? [photo]
+  (let [f (io/file upload-dir (:filename photo))]
+    (and (.exists f) (pos? (.length f)))))
+
 (defn gallery-handler [req]
-  (let [photos (db/get-all-photos)]
-    (html-response (views/gallery-page (ctx req) photos))))
+  (let [photos (filter photo-file-renderable? (db/get-all-photos))
+        full? (>= (db/photo-count) max-photos)]
+    (html-response (views/gallery-page (ctx req) photos full?))))
 
 (defn chat-handler [req]
-  (let [messages (db/get-recent-messages)]
-    (html-response (views/chat-page (ctx req) messages))))
+  (let [uid (get-in req [:user :id])
+        messages (db/get-recent-messages uid)
+        pinned (db/get-pinned-messages uid)]
+    (html-response (views/chat-page (ctx req) messages pinned))))
 
 ;; --- API Handlers ---
 
@@ -94,7 +145,7 @@
       (future (sheets/sync-rsvp! (:name user) (:group-size user) attending info)))
     (let [updated-rsvp (db/get-rsvp (:id user))]
       (sse/sse-response
-       (sse/merge-fragments (views/rsvp-fragment locale user updated-rsvp))))))
+       (sse/patch-elements (views/rsvp-fragment locale user updated-rsvp))))))
 
 (defn rsvp-info-handler [req]
   (let [user (:user req)
@@ -107,38 +158,67 @@
     (future (sheets/sync-rsvp! (:name user) (:group-size user) attending info))
     (let [updated-rsvp (db/get-rsvp (:id user))]
       (sse/sse-response
-       (sse/merge-fragments (views/rsvp-fragment locale user updated-rsvp))))))
+       (sse/patch-elements (views/rsvp-fragment locale user updated-rsvp))))))
+
+(defn- valid-upload? [file]
+  (and (map? file)
+       (seq (:filename file))
+       (pos? (or (:size file) 0))
+       (re-find #"\.[A-Za-z0-9]{1,8}$" (:filename file))))
 
 (defn photo-upload-handler [req]
   (let [user (:user req)
         file (get-in req [:multipart-params "photo"])]
-    (if file
-      (let [ext (last (clojure.string/split (:filename file) #"\."))
+    (when (and (valid-upload? file)
+               (< (db/photo-count) max-photos))
+      (let [ext (clojure.string/lower-case
+                 (last (clojure.string/split (:filename file) #"\.")))
             new-name (str (UUID/randomUUID) "." ext)
             dest (io/file upload-dir new-name)]
         (io/copy (:tempfile file) dest)
-        (db/save-photo! (:id user) new-name (:filename file))
-        (resp/redirect "/gallery"))
-      (resp/redirect "/gallery"))))
+        (db/save-photo! (:id user) new-name (:filename file))))
+    (resp/redirect (u "/gallery"))))
 
 (defn chat-send-handler [req]
   (let [user (:user req)
-        locale (get-locale req)
         body (or (parse-json-body req) {})
         message (clojure.string/trim (or (:chatMsg body) ""))]
     (when (seq message)
-      (db/save-message! (:id user) message))
-    (let [messages (db/get-recent-messages)]
-      (sse/sse-response
-       (sse/merge-fragments (views/chat-messages-html locale messages (:id user)))
-       (sse/merge-signals {:chatMsg ""})))))
+      (db/save-message! (:id user) message)
+      (broadcast-chat!))
+    (sse/sse-response
+     (sse/patch-signals {:chatMsg ""}))))
 
-(defn chat-messages-html-handler [req]
+(defn chat-like-handler [req]
+  (let [user (:user req)
+        msg-id (some-> (get-in req [:query-params "id"]) parse-long)]
+    (when msg-id
+      (db/toggle-like! (:id user) msg-id)
+      (broadcast-chat!))
+    (sse/sse-response)))
+
+(defn chat-pin-handler [req]
+  (let [user (:user req)
+        msg-id (some-> (get-in req [:query-params "id"]) parse-long)]
+    (when msg-id
+      (db/toggle-pin! (:id user) msg-id)
+      (broadcast-chat!))
+    (sse/sse-response)))
+
+(defn display-name-handler [req]
   (let [user (:user req)
         locale (get-locale req)
-        messages (db/get-recent-messages)]
-    (-> (resp/response (views/chat-messages-html locale messages (:id user)))
-        (resp/content-type "text/html; charset=utf-8"))))
+        body (or (parse-json-body req) {})
+        raw (or (:newDisplayName body) "")
+        new-name (let [t (clojure.string/trim raw)]
+                   (when (seq t) (subs t 0 (min 30 (count t)))))]
+    (db/update-display-name! (:id user) new-name)
+    (let [updated (db/get-user-by-id (:id user))]
+      (broadcast-chat!)
+      (sse/sse-response
+       (sse/patch-elements (views/nav-user-html locale updated))
+       (sse/patch-signals {:showNameEdit false
+                           :newDisplayName (db/effective-name updated)})))))
 
 ;; --- Upload file serving ---
 
@@ -158,21 +238,45 @@
 
 ;; --- Router ---
 
+;; --- Party Game Handlers ---
+
+(defn party-hub-handler [req]
+  (html-response (views/party-hub-page (ctx req))))
+
+(defn party-bump-handler [req]
+  (html-response (views/party-bump-page (get-locale req))))
+
+(defn party-room-handler [req]
+  (html-response (views/party-room-page (get-locale req))))
+
+(defn party-radar-handler [req]
+  (html-response (views/party-radar-page (get-locale req))))
+
+;; --- Router ---
+
 (def app
   (reitit/ring-handler
    (reitit/router
     [["/login" {:get login-handler}]
+     ["/impressum" {:get impressum-handler}]
      ["/set-locale" {:get set-locale-handler}]
      ["/" {:get home-handler :middleware [require-auth]}]
      ["/contact" {:get contact-handler :middleware [require-auth]}]
      ["/directions" {:get directions-handler :middleware [require-auth]}]
      ["/gallery" {:get gallery-handler :middleware [require-auth]}]
      ["/chat" {:get chat-handler :middleware [require-auth]}]
+     ["/party" {:get party-hub-handler :middleware [require-auth]}]
+     ["/party/bump" {:get party-bump-handler}]
+     ["/party/room" {:get party-room-handler}]
+     ["/party/radar" {:get party-radar-handler}]
      ["/api/rsvp" {:post rsvp-handler :middleware [require-auth]}]
      ["/api/rsvp/info" {:post rsvp-info-handler :middleware [require-auth]}]
      ["/api/photo" {:post photo-upload-handler :middleware [require-auth]}]
+     ["/api/chat/stream" {:get chat-stream-handler :middleware [require-auth]}]
      ["/api/chat/send" {:post chat-send-handler :middleware [require-auth]}]
-     ["/api/chat/messages-html" {:get chat-messages-html-handler :middleware [require-auth]}]
+     ["/api/chat/like" {:post chat-like-handler :middleware [require-auth]}]
+     ["/api/chat/pin" {:post chat-pin-handler :middleware [require-auth]}]
+     ["/api/profile/display-name" {:post display-name-handler :middleware [require-auth]}]
      ["/uploads/:filename" {:get serve-upload}]])
    (reitit/routes
     (reitit/create-resource-handler {:path "/"})
