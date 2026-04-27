@@ -12,3 +12,7 @@ psql -U "$PG_USER" -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASSWORD';" 2>/de
 psql -U "$PG_USER" -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" 2>/dev/null || echo "Database '$DB_NAME' already exists."
 
 echo "Done. Connection: postgresql://$DB_USER:$DB_PASSWORD@localhost:5432/$DB_NAME"
+
+echo
+echo "Applying migrations..."
+"$(dirname "$0")/migrate.sh"
