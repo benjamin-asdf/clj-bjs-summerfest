@@ -161,8 +161,10 @@
             uid msg ts)))
     n))
 
+(def chat-page-size 1000)
+
 (defn get-recent-messages
-  ([current-user-id] (get-recent-messages current-user-id 100))
+  ([current-user-id] (get-recent-messages current-user-id chat-page-size))
   ([current-user-id limit]
    (reverse
     (q "SELECT m.*, COALESCE(u.display_name, u.name) AS user_name,
@@ -171,6 +173,35 @@
                EXISTS(SELECT 1 FROM chat_pins cp WHERE cp.message_id = m.id) as pinned
         FROM chat_messages m JOIN users u ON m.user_id = u.id
         ORDER BY m.created_at DESC LIMIT ?" current-user-id limit))))
+
+(defn get-older-messages
+  "Messages strictly older than `before-id`, oldest-first, up to `limit`."
+  ([current-user-id before-id] (get-older-messages current-user-id before-id chat-page-size))
+  ([current-user-id before-id limit]
+   (reverse
+    (q "SELECT m.*, COALESCE(u.display_name, u.name) AS user_name,
+               (SELECT COUNT(*) FROM chat_likes cl WHERE cl.message_id = m.id) as like_count,
+               EXISTS(SELECT 1 FROM chat_likes cl WHERE cl.message_id = m.id AND cl.user_id = ?) as liked_by_me,
+               EXISTS(SELECT 1 FROM chat_pins cp WHERE cp.message_id = m.id) as pinned
+        FROM chat_messages m JOIN users u ON m.user_id = u.id
+        WHERE m.id < ?
+        ORDER BY m.created_at DESC LIMIT ?" current-user-id before-id limit))))
+
+(defn older-exists?
+  "Is there at least one message older than `before-id`?"
+  [before-id]
+  (boolean (q1 "SELECT 1 FROM chat_messages WHERE id < ? LIMIT 1" before-id)))
+
+(defn get-message
+  "Single message by id, with the same shape (like_count, liked_by_me, pinned, user_name)
+   as `get-recent-messages` rows. `current-user-id` parameterizes liked_by_me."
+  [current-user-id msg-id]
+  (q1 "SELECT m.*, COALESCE(u.display_name, u.name) AS user_name,
+              (SELECT COUNT(*) FROM chat_likes cl WHERE cl.message_id = m.id) as like_count,
+              EXISTS(SELECT 1 FROM chat_likes cl WHERE cl.message_id = m.id AND cl.user_id = ?) as liked_by_me,
+              EXISTS(SELECT 1 FROM chat_pins cp WHERE cp.message_id = m.id) as pinned
+       FROM chat_messages m JOIN users u ON m.user_id = u.id
+       WHERE m.id = ?" current-user-id msg-id))
 
 (defn get-pinned-messages [current-user-id]
   (q "SELECT m.*, COALESCE(u.display_name, u.name) AS user_name, cp.pinned_at,

@@ -53,20 +53,48 @@
 
 (defonce chat-clients (atom {})) ;; {channel {:user-id id, :locale locale}}
 
-(defn- send-chat-state! [ch user-id locale]
-  (let [messages (db/get-recent-messages user-id)
-        pinned (db/get-pinned-messages user-id)]
-    (hk/send! ch
-              (str (sse/patch-elements (views/chat-messages-html locale messages user-id))
-                   (sse/patch-elements (views/pinned-messages-html locale pinned user-id)))
-              false)))
+(defn- safe-send! [ch payload]
+  (try
+    (hk/send! ch payload false)
+    (catch Exception _
+      (swap! chat-clients dissoc ch))))
 
-(defn- broadcast-chat! []
+(defn- chat-initial-payload [user-id locale]
+  (let [messages (db/get-recent-messages user-id)
+        pinned (db/get-pinned-messages user-id)
+        oldest-id (some-> (first messages) :id)
+        more? (and oldest-id (db/older-exists? oldest-id))]
+    (str (sse/patch-elements (views/load-older-html locale oldest-id more?))
+         (sse/patch-elements (views/chat-messages-html locale messages user-id))
+         (sse/patch-elements (views/pinned-messages-html locale pinned user-id)))))
+
+(defn- broadcast-new-message! [msg-id]
   (doseq [[ch {:keys [user-id locale]}] @chat-clients]
-    (try
-      (send-chat-state! ch user-id locale)
-      (catch Exception _
-        (swap! chat-clients dissoc ch)))))
+    (when-let [msg (db/get-message user-id msg-id)]
+      (safe-send! ch
+                  (str (sse/patch-remove "#chat-empty")
+                       (sse/patch-elements
+                        (views/single-msg-html locale msg user-id)
+                        {:selector "#chat-messages" :mode :append}))))))
+
+(defn- broadcast-message-changed! [msg-id]
+  (doseq [[ch {:keys [user-id locale]}] @chat-clients]
+    (when-let [msg (db/get-message user-id msg-id)]
+      (safe-send! ch (sse/patch-elements (views/single-msg-html locale msg user-id))))))
+
+(defn- broadcast-pin-changed! [msg-id]
+  (doseq [[ch {:keys [user-id locale]}] @chat-clients]
+    (when-let [msg (db/get-message user-id msg-id)]
+      (let [pinned (db/get-pinned-messages user-id)]
+        (safe-send! ch
+                    (str (sse/patch-elements (views/single-msg-html locale msg user-id))
+                         (sse/patch-elements (views/pinned-messages-html locale pinned user-id))))))))
+
+(defn- broadcast-display-name! []
+  ;; Display-name change touches every message by that user — fall back to a
+  ;; full re-render. Rare event, so the cost is acceptable.
+  (doseq [[ch {:keys [user-id locale]}] @chat-clients]
+    (safe-send! ch (chat-initial-payload user-id locale))))
 
 (defn chat-stream-handler [req]
   (let [user (:user req)
@@ -74,16 +102,12 @@
     (hk/with-channel req ch
       (swap! chat-clients assoc ch {:user-id (:id user) :locale locale})
       (hk/on-close ch (fn [_] (swap! chat-clients dissoc ch)))
-      (let [messages (db/get-recent-messages (:id user))
-            pinned (db/get-pinned-messages (:id user))
-            initial (str (sse/patch-elements (views/chat-messages-html locale messages (:id user)))
-                         (sse/patch-elements (views/pinned-messages-html locale pinned (:id user))))]
-        (hk/send! ch {:status 200
-                      :headers {"Content-Type" "text/event-stream"
-                                "Cache-Control" "no-cache"
-                                "X-Accel-Buffering" "no"}
-                      :body initial}
-                  false)))))
+      (hk/send! ch {:status 200
+                    :headers {"Content-Type" "text/event-stream"
+                              "Cache-Control" "no-cache"
+                              "X-Accel-Buffering" "no"}
+                    :body (chat-initial-payload (:id user) locale)}
+                false))))
 
 ;; --- Page Handlers ---
 
@@ -128,8 +152,10 @@
 (defn chat-handler [req]
   (let [uid (get-in req [:user :id])
         messages (db/get-recent-messages uid)
-        pinned (db/get-pinned-messages uid)]
-    (html-response (views/chat-page (ctx req) messages pinned))))
+        pinned (db/get-pinned-messages uid)
+        oldest-id (some-> (first messages) :id)
+        more? (and oldest-id (db/older-exists? oldest-id))]
+    (html-response (views/chat-page (ctx req) messages pinned oldest-id more?))))
 
 ;; --- API Handlers ---
 
@@ -184,8 +210,8 @@
         body (or (parse-json-body req) {})
         message (clojure.string/trim (or (:chatMsg body) ""))]
     (when (seq message)
-      (db/save-message! (:id user) message)
-      (broadcast-chat!))
+      (let [{:keys [id]} (db/save-message! (:id user) message)]
+        (broadcast-new-message! id)))
     (sse/sse-response
      (sse/patch-signals {:chatMsg ""}))))
 
@@ -194,7 +220,7 @@
         msg-id (some-> (get-in req [:query-params "id"]) parse-long)]
     (when msg-id
       (db/toggle-like! (:id user) msg-id)
-      (broadcast-chat!))
+      (broadcast-message-changed! msg-id))
     (sse/sse-response)))
 
 (defn chat-pin-handler [req]
@@ -202,8 +228,21 @@
         msg-id (some-> (get-in req [:query-params "id"]) parse-long)]
     (when msg-id
       (db/toggle-pin! (:id user) msg-id)
-      (broadcast-chat!))
+      (broadcast-pin-changed! msg-id))
     (sse/sse-response)))
+
+(defn chat-older-handler [req]
+  (let [user (:user req)
+        locale (get-locale req)
+        before-id (some-> (get-in req [:query-params "before"]) parse-long)
+        msgs (when before-id (db/get-older-messages (:id user) before-id))
+        new-oldest (some-> (first msgs) :id)
+        more? (and new-oldest (db/older-exists? new-oldest))
+        msgs-html (clojure.string/join (map #(views/single-msg-html locale % (:id user)) msgs))]
+    (sse/sse-response
+     (when (seq msgs)
+       (sse/patch-elements msgs-html {:selector "#chat-messages" :mode :prepend}))
+     (sse/patch-elements (views/load-older-html locale new-oldest more?)))))
 
 (defn display-name-handler [req]
   (let [user (:user req)
@@ -214,7 +253,7 @@
                    (when (seq t) (subs t 0 (min 30 (count t)))))]
     (db/update-display-name! (:id user) new-name)
     (let [updated (db/get-user-by-id (:id user))]
-      (broadcast-chat!)
+      (broadcast-display-name!)
       (sse/sse-response
        (sse/patch-elements (views/nav-user-html locale updated))
        (sse/patch-signals {:showNameEdit false
@@ -276,6 +315,7 @@
      ["/api/chat/send" {:post chat-send-handler :middleware [require-auth]}]
      ["/api/chat/like" {:post chat-like-handler :middleware [require-auth]}]
      ["/api/chat/pin" {:post chat-pin-handler :middleware [require-auth]}]
+     ["/api/chat/older" {:get chat-older-handler :middleware [require-auth]}]
      ["/api/profile/display-name" {:post display-name-handler :middleware [require-auth]}]
      ["/uploads/:filename" {:get serve-upload}]])
    (reitit/routes

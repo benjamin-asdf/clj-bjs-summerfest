@@ -298,6 +298,30 @@
 
 (def ^:private time-fmt (java.time.format.DateTimeFormatter/ofPattern "HH:mm"))
 
+(defn- linkify
+  "Split `s` into a seq of plain strings and hiccup anchor tags for any https URLs."
+  [s]
+  (let [s (or s "")
+        m (re-matcher #"https://[^\s<>\"]+" s)]
+    (loop [parts []
+           last-end 0]
+      (if (.find m)
+        (let [start (.start m)
+              end (.end m)
+              raw (.group m)
+              trimmed (str/replace raw #"[.,;:!?)\]}]+$" "")
+              tail (subs raw (count trimmed))]
+          (recur (cond-> parts
+                   (< last-end start) (conj (subs s last-end start))
+                   :always (conj [:a.chat-link {:href trimmed
+                                                :target "_blank"
+                                                :rel "noopener noreferrer"}
+                                  trimmed])
+                   (seq tail) (conj tail))
+                 end))
+        (seq (cond-> parts
+               (< last-end (count s)) (conj (subs s last-end))))))))
+
 (defn- msg-html [locale msg current-user-id]
   (let [own? (= (:user-id msg) current-user-id)
         liked? (:liked-by-me msg)
@@ -308,7 +332,7 @@
      [:div.chat-msg-top
       [:span.chat-author (:user-name msg)]
       [:span.chat-time (.format time-fmt (.toLocalDateTime (:created-at msg)))]]
-     [:span.chat-text (:message msg)]
+     [:span.chat-text (linkify (:message msg))]
      [:div.chat-msg-actions
       [:button.chat-action {:class (when liked? "liked")
                             "data-on:click" (str "@post('" (u "/api/chat/like") "?id=" (:id msg) "')")}
@@ -321,13 +345,29 @@
                                               (str "@post('" (u "/api/chat/pin") "?id=" (:id msg) "')"))}
        [:span.action-icon (if pinned? "📌" "pin")]]]]))
 
+(defn single-msg-html
+  "Render a single message as an HTML string."
+  [locale msg current-user-id]
+  (h/html (msg-html locale msg current-user-id)))
+
+(defn load-older-html
+  "Render the load-older wrapper. Always emits the wrapper so morph patches
+   can replace its contents (button or empty)."
+  [locale oldest-id more?]
+  (h/html
+   [:div#load-older-wrap.load-older-wrap
+    (when (and more? oldest-id)
+      [:button#load-older.btn.btn-link
+       {"data-on:click" (str "@get('" (u (str "/api/chat/older?before=" oldest-id)) "')")}
+       (t locale :chat/load-older)])]))
+
 (defn chat-messages-html [locale messages current-user-id]
   (h/html
    [:div#chat-messages.chat-messages
     (if (seq messages)
       (for [msg messages]
         (msg-html locale msg current-user-id))
-      [:p.empty (t locale :chat/empty)])]))
+      [:p#chat-empty.empty (t locale :chat/empty)])]))
 
 (defn pinned-messages-html [locale pinned-messages current-user-id]
   (h/html
@@ -337,15 +377,16 @@
       (for [msg pinned-messages]
         [:div.pinned-item {:onclick (str "document.getElementById('msg-" (:id msg) "')?.scrollIntoView({behavior:'smooth',block:'center'})")}
          [:span.pinned-author (:user-name msg)]
-         [:span.pinned-text (:message msg)]])
+         [:span.pinned-text (linkify (:message msg))]])
       [:p.empty.small (t locale :chat/no-pins)])]))
 
-(defn chat-page [ctx messages pinned-messages]
+(defn chat-page [ctx messages pinned-messages oldest-id more-older?]
   (let [{:keys [user locale]} ctx]
     (layout (t locale :chat/title) ctx
             [:div.chat-layout {"data-init" (str "@get('" (u "/api/chat/stream") "')")}
              [:div.card.chat-card {:data-signals "{chatMsg: ''}"}
               [:h1 (t locale :chat/title)]
+              (load-older-html locale oldest-id more-older?)
               (chat-messages-html locale messages (:id user))
               [:button#scroll-btn.scroll-to-bottom (t locale :chat/jump-to-latest)]
               [:div.chat-input

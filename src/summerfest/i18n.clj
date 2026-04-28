@@ -74,6 +74,7 @@
     :chat/no-pins "Keine angepinnten Nachrichten"
     :chat/jump-to-latest "Neueste"
     :chat/confirm-unpin "Pin entfernen?"
+    :chat/load-older "Ältere laden"
 
     ;; Login
     :login/title "Bennis Sommerfestle"
@@ -185,6 +186,7 @@
     :chat/no-pins "No pinned messages"
     :chat/jump-to-latest "Latest"
     :chat/confirm-unpin "Remove pin?"
+    :chat/load-older "Load older"
 
     ;; Login
     :login/title "Bennis Sommerfestle"
