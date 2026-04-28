@@ -231,9 +231,11 @@
     (if (seq photos)
       (for [photo photos]
         [:div.photo-card
-         [:img {:src (u (str "/uploads/" (:filename photo)))
+         [:img {:src (u (str "/thumbs/" (:filename photo)))
+                "data-full" (u (str "/uploads/" (:filename photo)))
                 :alt (or (:original-name photo) "Photo")
-                :loading "lazy"}]
+                :loading "lazy"
+                :decoding "async"}]
          [:p.photo-meta (t locale :gallery/uploaded-by (:user-name photo))]])
       [:p.empty (t locale :gallery/empty)])]))
 
@@ -265,7 +267,7 @@
   var box=document.getElementById('lightbox'),img=document.getElementById('lightbox-img');
   if(!box||!img)return;
   var grid=document.getElementById('photo-grid'),idx=-1,srcs=[];
-  function refresh(){srcs=Array.from(grid.querySelectorAll('.photo-card img')).map(function(i){return i.currentSrc||i.src})}
+  function refresh(){srcs=Array.from(grid.querySelectorAll('.photo-card img')).map(function(i){return i.dataset.full||i.currentSrc||i.src})}
   function show(i){if(!srcs.length)return;idx=(i+srcs.length)%srcs.length;img.src=srcs[idx]}
   function open(i){refresh();show(i);box.hidden=false;document.body.style.overflow='hidden'}
   function close(){box.hidden=true;img.removeAttribute('src');document.body.style.overflow=''}
