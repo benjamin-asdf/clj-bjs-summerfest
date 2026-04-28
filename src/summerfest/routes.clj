@@ -18,6 +18,62 @@
 (def ^:private max-photos
   (parse-long (or (System/getenv "MAX_PHOTOS") "1000")))
 
+(def ^:private thumb-max-dim 480)
+
+(defn- thumb-rel-path
+  "Path of the JPEG thumbnail for an upload, relative to upload-dir."
+  [filename]
+  (str "thumbs/" (clojure.string/replace filename #"\.[^.]+$" ".jpg")))
+
+(defn- generate-thumbnail!
+  "Read src-file, write a JPEG thumbnail at thumb-file scaled so the longest
+   side is at most max-dim. Returns true on success, false if src couldn't be
+   decoded."
+  [src-file thumb-file max-dim]
+  (if-let [src (javax.imageio.ImageIO/read src-file)]
+    (let [w (.getWidth src)
+          h (.getHeight src)
+          scale (min 1.0 (/ (double max-dim) (max w h)))
+          tw (max 1 (int (* w scale)))
+          th (max 1 (int (* h scale)))
+          dst (java.awt.image.BufferedImage. tw th java.awt.image.BufferedImage/TYPE_INT_RGB)
+          g (.createGraphics dst)]
+      (try
+        (.setRenderingHint g
+                           java.awt.RenderingHints/KEY_INTERPOLATION
+                           java.awt.RenderingHints/VALUE_INTERPOLATION_BILINEAR)
+        (.setRenderingHint g
+                           java.awt.RenderingHints/KEY_RENDERING
+                           java.awt.RenderingHints/VALUE_RENDER_QUALITY)
+        (.drawImage g src 0 0 tw th nil)
+        (finally (.dispose g)))
+      (io/make-parents thumb-file)
+      (javax.imageio.ImageIO/write dst "jpg" thumb-file)
+      true)
+    false))
+
+(defn backfill-thumbnails!
+  "REPL helper: ensure every photo row has a thumbnail on disk.
+   Returns counts: {:ok :skipped :missing-source :failed}."
+  []
+  (reduce
+   (fn [acc {:keys [filename]}]
+     (let [src (io/file upload-dir filename)
+           thumb (io/file upload-dir (thumb-rel-path filename))]
+       (cond
+         (.exists thumb) (update acc :skipped inc)
+         (not (.exists src)) (update acc :missing-source inc)
+         :else
+         (try
+           (if (generate-thumbnail! src thumb thumb-max-dim)
+             (update acc :ok inc)
+             (update acc :failed inc))
+           (catch Exception e
+             (println "thumb fail" filename (.getMessage e))
+             (update acc :failed inc))))))
+   {:ok 0 :skipped 0 :missing-source 0 :failed 0}
+   (db/get-all-photos)))
+
 ;; --- Helpers ---
 
 (defn- get-locale [req]
@@ -200,8 +256,13 @@
       (let [ext (clojure.string/lower-case
                  (last (clojure.string/split (:filename file) #"\.")))
             new-name (str (UUID/randomUUID) "." ext)
-            dest (io/file upload-dir new-name)]
+            dest (io/file upload-dir new-name)
+            thumb (io/file upload-dir (thumb-rel-path new-name))]
         (io/copy (:tempfile file) dest)
+        (try
+          (generate-thumbnail! dest thumb thumb-max-dim)
+          (catch Exception e
+            (println "Thumbnail generation failed for" new-name (.getMessage e))))
         (db/save-photo! (:id user) new-name (:filename file))))
     (resp/redirect (u "/gallery"))))
 
@@ -261,19 +322,51 @@
 
 ;; --- Upload file serving ---
 
+(defn- mime-of [filename]
+  (condp #(clojure.string/ends-with? %2 %1) filename
+    ".jpg" "image/jpeg"
+    ".jpeg" "image/jpeg"
+    ".png" "image/png"
+    ".gif" "image/gif"
+    ".webp" "image/webp"
+    "application/octet-stream"))
+
+(defn- with-immutable-cache [resp]
+  ;; Filenames are content-addressed (UUID + ext), so the bytes never change.
+  (resp/header resp "Cache-Control" "public, max-age=31536000, immutable"))
+
 (defn serve-upload [req]
   (let [filename (get-in req [:path-params :filename])
         file (io/file upload-dir filename)]
     (if (.exists file)
       (-> (resp/response file)
-          (resp/content-type (condp #(clojure.string/ends-with? %2 %1) filename
-                               ".jpg" "image/jpeg"
-                               ".jpeg" "image/jpeg"
-                               ".png" "image/png"
-                               ".gif" "image/gif"
-                               ".webp" "image/webp"
-                               "application/octet-stream")))
+          (resp/content-type (mime-of filename))
+          with-immutable-cache)
       (resp/not-found "Not found"))))
+
+(defn serve-thumb
+  "Serves the JPEG thumbnail for an upload. Generates lazily on first hit
+   for older photos that pre-date the thumbnail feature; falls back to the
+   full image if thumb generation fails."
+  [req]
+  (let [filename (get-in req [:path-params :filename])
+        thumb (io/file upload-dir (thumb-rel-path filename))
+        full (io/file upload-dir filename)]
+    (when (and (not (.exists thumb)) (.exists full))
+      (try (generate-thumbnail! full thumb thumb-max-dim)
+           (catch Exception _ nil)))
+    (cond
+      (.exists thumb)
+      (-> (resp/response thumb)
+          (resp/content-type "image/jpeg")
+          with-immutable-cache)
+
+      (.exists full)
+      (-> (resp/response full)
+          (resp/content-type (mime-of filename))
+          with-immutable-cache)
+
+      :else (resp/not-found "Not found"))))
 
 ;; --- Router ---
 
@@ -317,7 +410,8 @@
      ["/api/chat/pin" {:post chat-pin-handler :middleware [require-auth]}]
      ["/api/chat/older" {:get chat-older-handler :middleware [require-auth]}]
      ["/api/profile/display-name" {:post display-name-handler :middleware [require-auth]}]
-     ["/uploads/:filename" {:get serve-upload}]])
+     ["/uploads/:filename" {:get serve-upload}]
+     ["/thumbs/:filename" {:get serve-thumb}]])
    (reitit/routes
     (reitit/create-resource-handler {:path "/"})
     (reitit/create-default-handler))))
