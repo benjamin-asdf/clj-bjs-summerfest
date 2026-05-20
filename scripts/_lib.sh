@@ -17,6 +17,8 @@ remote() {
 
 remote_sh() {
   # Runs the given shell snippet on the remote with our env exported.
+  # SESSION_SECRET is intentionally NOT shipped from the dev machine — it
+  # lives on the server in $REMOTE_ROOT/.env and is sourced by start.sh.
   ssh "$REMOTE_HOST" \
     "REMOTE_ROOT='$REMOTE_ROOT' \
      BASE_PATH='$BASE_PATH' \
@@ -27,6 +29,5 @@ remote_sh() {
      DB_NAME='$DB_NAME' \
      DB_USER='$DB_USER' \
      DB_PASSWORD='$DB_PASSWORD' \
-     SESSION_SECRET='$SESSION_SECRET' \
      sh -s" -- "$@"
 }

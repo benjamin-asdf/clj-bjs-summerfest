@@ -10,14 +10,25 @@
 (defonce server (atom nil))
 (defonce nrepl-server (atom nil))
 
-(def session-secret
-  (or (System/getenv "SESSION_SECRET") "summerfest2026!!"))
+(defn- derive-session-key
+  "Read SESSION_SECRET and derive a 16-byte AES-128 key from it via SHA-256.
+   Fails fast if the env var is missing or too short — refuses to fall back
+   to a hardcoded default."
+  []
+  (let [s (System/getenv "SESSION_SECRET")]
+    (when (or (nil? s) (< (count s) 16))
+      (throw (ex-info "SESSION_SECRET must be set (>= 16 chars). Generate one with `openssl rand -base64 32` and put it in the server's .env." {})))
+    (let [md (java.security.MessageDigest/getInstance "SHA-256")
+          digest (.digest md (.getBytes s "UTF-8"))]
+      (java.util.Arrays/copyOf digest 16))))
+
+(def ^:private session-key (derive-session-key))
 
 (def ^:private wrapped-routes
   (-> routes/app
       (wrap-defaults
        (-> site-defaults
-           (assoc-in [:session :store] (cookie-store {:key (.getBytes session-secret)}))
+           (assoc-in [:session :store] (cookie-store {:key session-key}))
            (assoc-in [:session :cookie-attrs :same-site] :lax)
            (assoc-in [:session :cookie-attrs :max-age] (* 60 60 24 30))
            (assoc-in [:security :anti-forgery] false)))
@@ -40,7 +51,7 @@
     s))
 
 (defn start! [& {:keys [port ip nrepl-port]
-                 :or {port 3000
+                 :or {port 3030
                       ip (or (System/getenv "BIND_IP") "0.0.0.0")}}]
   (db/migrate!)
   (reset! server (hk/run-server app {:port port :ip ip}))
@@ -64,3 +75,8 @@
         nrepl-port (some-> (System/getenv "NREPL_PORT") parse-long)]
     (start! :port port :nrepl-port nrepl-port)
     @(promise)))
+
+(comment
+
+  (stop!)
+  (start!))

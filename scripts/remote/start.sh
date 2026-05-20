@@ -14,8 +14,20 @@ LOG_DIR="$REMOTE_ROOT/log"
 UPLOAD_DIR="$REMOTE_ROOT/uploads"
 PID_FILE="$RUN_DIR/app.pid"
 LOG_FILE="$LOG_DIR/app.log"
+ENV_FILE="$REMOTE_ROOT/.env"
 
 mkdir -p "$RUN_DIR" "$LOG_DIR" "$UPLOAD_DIR"
+
+# Server-side secrets (SESSION_SECRET, ...). Generated once per environment;
+# never shipped from the dev machine. See README for bootstrap.
+if [ ! -f "$ENV_FILE" ]; then
+  echo "ERROR: $ENV_FILE missing. Bootstrap with:"
+  echo "  umask 077 && echo \"SESSION_SECRET=\$(openssl rand -base64 32)\" >> $ENV_FILE"
+  exit 1
+fi
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+: "${SESSION_SECRET:?must be set in $ENV_FILE}"
 
 if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   echo "Already running (pid $(cat "$PID_FILE")). Use stop.sh first."

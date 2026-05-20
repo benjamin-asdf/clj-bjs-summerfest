@@ -25,35 +25,123 @@
       (.refresh creds)
       (.getTokenValue (.getAccessToken creds)))))
 
+(defn- api-url [path]
+  (str "https://sheets.googleapis.com/v4/spreadsheets/" sheets-id path))
+
+(defn- auth-headers [token]
+  {"Authorization" (str "Bearer " token)
+   "Content-Type" "application/json"})
+
+(defn- token-or-throw []
+  (or (get-access-token)
+      (throw (ex-info "Google Sheets is not configured. Set GOOGLE_SERVICE_KEY_JSON to the path of the service account key." {}))))
+
+(defn- col-letter
+  "Map 1->A, 2->B, ..., 26->Z. Sufficient for our tabs which top out at column D."
+  [n]
+  (assert (<= 1 n 26) "col-letter only supports A..Z")
+  (char (+ (dec (int \A)) n)))
+
+(defn fetch-range
+  "Read the rows in an A1 range (e.g. \"Invites!A:D\"). Returns a vector of row
+   vectors (empty when the range has no values) or nil if Sheets is not
+   configured."
+  [a1-range]
+  (when-let [token (get-access-token)]
+    (let [resp (http/get (api-url (str "/values/" a1-range))
+                         {:headers {"Authorization" (str "Bearer " token)}
+                          :as :json})]
+      (get-in resp [:body :values] []))))
+
+(defn fetch-tab
+  "Convenience: read all rows from a named tab."
+  [tab-name]
+  (fetch-range tab-name))
+
 (defn fetch-sheet!
-  "Fetch all rows from the sheet. Returns a vector of row vectors.
-   Optional range param defaults to the whole sheet."
+  "Legacy: read all rows. Defaults to \"Sheet1\". Kept for back-compat."
   ([] (fetch-sheet! nil))
   ([range]
-   (when-let [token (get-access-token)]
-     (let [range-part (or range "Sheet1")
-           url (str "https://sheets.googleapis.com/v4/spreadsheets/"
-                    sheets-id "/values/" range-part)
-           resp (http/get url
-                          {:headers {"Authorization" (str "Bearer " token)}
-                           :as :json})]
-       (get-in resp [:body :values])))))
+   (fetch-range (or range "Sheet1"))))
+
+(defn update-range!
+  "Overwrite an A1 range with the given rows. Returns the API response body."
+  [a1-range rows]
+  (let [token (token-or-throw)]
+    (-> (http/put (api-url (str "/values/" a1-range))
+                  {:headers (auth-headers token)
+                   :query-params {"valueInputOption" "RAW"}
+                   :body (json/generate-string {:values rows})
+                   :as :json})
+        :body)))
+
+(defn update-row!
+  "Write `row-vals` into `tab-name` at the given 1-based row number, starting at
+   column A. Sized to len(row-vals)."
+  [tab-name row-number row-vals]
+  (let [end (col-letter (count row-vals))
+        range (str tab-name "!A" row-number ":" end row-number)]
+    (update-range! range [row-vals])))
+
+(defn append-rows!
+  "Append rows to the bottom of a tab. Returns the API response body."
+  [tab-name rows]
+  (when (seq rows)
+    (let [token (token-or-throw)]
+      (-> (http/post (api-url (str "/values/" tab-name "!A:Z:append"))
+                     {:headers (auth-headers token)
+                      :query-params {"valueInputOption" "RAW"
+                                     "insertDataOption" "INSERT_ROWS"}
+                      :body (json/generate-string {:values rows})
+                      :as :json})
+          :body))))
+
+(defn ensure-tab!
+  "If the workbook doesn't have a tab named `tab-name`, create it. No-op
+   otherwise. Returns truthy when a new tab was added."
+  [tab-name]
+  (let [token (token-or-throw)
+        sheets (-> (http/get (api-url "?fields=sheets.properties.title")
+                             {:headers {"Authorization" (str "Bearer " token)}
+                              :as :json})
+                   :body :sheets)
+        existing (set (map #(get-in % [:properties :title]) sheets))]
+    (when-not (existing tab-name)
+      (http/post (api-url ":batchUpdate")
+                 {:headers (auth-headers token)
+                  :body (json/generate-string
+                         {:requests [{:addSheet {:properties {:title tab-name}}}]})
+                  :as :json})
+      true)))
+
+(defn ensure-headers!
+  "Write `headers` into row 1 of `tab-name` if it isn't already an exact match.
+   Creates the tab if missing."
+  [tab-name headers]
+  (ensure-tab! tab-name)
+  (let [existing (fetch-tab tab-name)
+        first-row (some-> existing first vec)]
+    (when (not= first-row (mapv str headers))
+      (update-range! (str tab-name "!A1") [headers]))))
 
 (defn sync-rsvp!
-  "Sync an RSVP to Google Sheets. Silently skips if not configured."
-  [user-name group-size attending additional-info]
+  "Sync one RSVP row to Google Sheets. Silently skips if not configured.
+   Columns: user-name, role (primary/+1), parent-name (when +1), attending text,
+   info, timestamp. Append-only — the sheet keeps the full history; downstream
+   logic decides which row is current per user."
+  [user attending additional-info]
   (when-let [token (get-access-token)]
     (try
-      (let [url (str "https://sheets.googleapis.com/v4/spreadsheets/"
-                     sheets-id "/values/A:E:append")
-            row [user-name
-                 (str group-size)
-                 (if attending "Yes" "No")
+      (let [primary? (nil? (:parent-user-id user))
+            display (or (:display-name user) (:name user))
+            row [display
+                 (if primary? "primary" "+1")
+                 (or (:parent-name user) "")
+                 (or attending "")
                  (or additional-info "")
                  (.toString (java.time.Instant/now))]]
-        (http/post url
-                   {:headers {"Authorization" (str "Bearer " token)
-                              "Content-Type" "application/json"}
+        (http/post (api-url "/values/A:F:append")
+                   {:headers (auth-headers token)
                     :query-params {"valueInputOption" "RAW"
                                    "insertDataOption" "INSERT_ROWS"}
                     :body (json/generate-string {:values [row]})}))

@@ -1,7 +1,8 @@
 (ns summerfest.db
   (:require [next.jdbc :as jdbc]
             [next.jdbc.result-set :as rs]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io]
+            [summerfest.names :as names]))
 
 (def db-spec
   {:dbtype "postgresql"
@@ -25,18 +26,42 @@
 
 (defn migrate! []
   (doseq [f ["migrations/001_init.sql"
-             "migrations/002_chat_likes_pins.sql"
-             "migrations/003_display_name.sql"]]
+             "migrations/002_chat_likes_pins.sql"]]
     (jdbc/execute! @ds [(slurp (io/resource f))]))
   (println "Migrations applied."))
 
 ;; Users
 
 (defn create-user!
-  "Create a user with a magic link token. Returns the user map with token.
-   Usage from REPL: (create-user! \"Alice & Bob\") or (create-user! \"Solo Sam\" :group-size 1)"
-  [name & {:keys [group-size] :or {group-size 2}}]
-  (q1 "INSERT INTO users (name, group_size) VALUES (?, ?) RETURNING *" name group-size))
+  "Mint a primary user with a magic link token. If `:name` is provided and
+   non-blank, that name is used for both the immutable `name` field and the
+   initial `display_name`. Otherwise we generate a random German animal name
+   like \"Fauler Fuchs\". Either way the user is prompted on first visit to
+   confirm/change the display name.
+   Usage: (create-user!) or (create-user! :name \"Bob\") or (create-user! :group-size 1)."
+  [& {:keys [name group-size] :or {group-size 2}}]
+  (let [trimmed (some-> name clojure.string/trim)
+        chosen (if (seq trimmed) trimmed (names/random-german-name))]
+    (q1 "INSERT INTO users (name, display_name, group_size) VALUES (?, ?, ?) RETURNING *"
+        chosen chosen group-size)))
+
+(defn create-secondary-user!
+  "Mint a secondary (+1) user owned by parent-user-id, with a random German display
+   name like \"Fauler Fuchs\". The base name field stores the same generated name so
+   admin-side listings remain meaningful even if display_name is later cleared."
+  [parent-user-id]
+  (let [generated (names/random-german-name)]
+    (q1 "INSERT INTO users (name, display_name, parent_user_id, group_size)
+         VALUES (?, ?, ?, 1) RETURNING *"
+        generated generated parent-user-id)))
+
+(defn get-secondary-user-of
+  "The single secondary user belonging to parent-user-id, or nil. Assumes one +1 max."
+  [parent-user-id]
+  (q1 "SELECT * FROM users WHERE parent_user_id = ? LIMIT 1" parent-user-id))
+
+(defn primary? [user]
+  (nil? (:parent-user-id user)))
 
 (defn get-user-by-token [token]
   (q1 "SELECT * FROM users WHERE token = ?::uuid" (str token)))
@@ -45,14 +70,16 @@
   (q1 "SELECT * FROM users WHERE id = ?" id))
 
 (defn list-users []
-  (q "SELECT id, name, token, group_size, created_at FROM users ORDER BY created_at"))
+  (q "SELECT id, name, token, group_size, parent_user_id, created_at FROM users ORDER BY created_at"))
 
 (defn update-display-name!
-  "Set or clear the user's display name. Empty/blank clears it (falls back to original name)."
+  "Set or clear the user's display name. Empty/blank clears it (falls back to the
+   auto-generated random name). Also marks the user as having confirmed their
+   name, which dismisses the welcome prompt for good."
   [user-id display-name]
   (let [trimmed (some-> display-name clojure.string/trim)
         value (when (seq trimmed) trimmed)]
-    (q1 "UPDATE users SET display_name = ? WHERE id = ? RETURNING *"
+    (q1 "UPDATE users SET display_name = ?, name_confirmed = true WHERE id = ? RETURNING *"
         value user-id)))
 
 (defn effective-name
@@ -62,7 +89,13 @@
 
 ;; RSVP
 
-(defn upsert-rsvp! [user-id attending additional-info]
+(def attending-values #{"yes" "yes_plus_one" "maybe" "no"})
+
+(defn upsert-rsvp!
+  "Persist the user's RSVP. `attending` must be one of attending-values.
+   Note: 'yes_plus_one' is only meaningful for primary users."
+  [user-id attending additional-info]
+  {:pre [(attending-values attending)]}
   (q1 "INSERT INTO rsvps (user_id, attending, additional_info, updated_at)
        VALUES (?, ?, ?, now())
        ON CONFLICT (user_id) DO UPDATE
@@ -73,9 +106,23 @@
 (defn get-rsvp [user-id]
   (q1 "SELECT * FROM rsvps WHERE user_id = ?" user-id))
 
-(defn get-all-rsvps []
-  (q "SELECT u.name, u.group_size, r.attending, r.additional_info, r.updated_at
-      FROM rsvps r JOIN users u ON r.user_id = u.id
+(defn get-all-rsvps
+  "All RSVPs joined with user info, including parent name when secondary.
+   Not normalized by design — primary +1 status and secondary's own answer are
+   independent fields, the sheet/admin side reconciles them."
+  []
+  (q "SELECT u.id          AS user_id,
+             u.name        AS user_name,
+             u.display_name,
+             u.parent_user_id,
+             p.name        AS parent_name,
+             u.group_size,
+             r.attending,
+             r.additional_info,
+             r.updated_at
+      FROM rsvps r
+      JOIN users u ON r.user_id = u.id
+      LEFT JOIN users p ON p.id = u.parent_user_id
       ORDER BY r.updated_at DESC"))
 
 ;; Photos
@@ -227,3 +274,8 @@
     (if existing
       (do (q1 "DELETE FROM chat_pins WHERE message_id = ?" message-id) false)
       (do (q1 "INSERT INTO chat_pins (message_id, pinned_by) VALUES (?, ?)" message-id user-id) true))))
+
+(comment
+  (+ 1 2 3)
+  (get-all-photos)
+  ())

@@ -1,0 +1,162 @@
+* Datum
+
+08.08.2026
+
+* Gaeste
+
+sheet:
+
+https://docs.google.com/spreadsheets/d/1NSnQagymFIDxLSXD2naspnyURWtR03yHkt33G5Ksfhc/edit?usp=sharing
+
+- 23 Zusagen
+- TODO: Rest einladen
+
+
+
+* Location
+
+- Hannover Suedstadt: Garten Innenhof
+- *Verfuegbare Flaeche: 7 x 14 m = 98 m^2*
+
+** Layout / Platzbedarf
+
+- Bierbank-Garnitur (Tisch 220x50cm + 2 Baenke): 8 Pers komfortabel,
+  Stellflaeche ~2,2x1,8m + Lauflaeche -> ~6 m^2/Garnitur
+- Zelt entlang der Laengsachse (14m) aufstellen -> Kopfende bleibt
+  fuer Bar/Buffet ueber volle 7m-Breite frei
+
+| Gaeste | Garnituren | Empf. Zelt | Zeltflaeche | Restflaeche |
+|--------+------------+------------+-------------+-------------|
+|     30 |          4 | 5x8m       | 40 m^2      | ~58 m^2     |
+|     40 |          5 | 6x8m       | 48 m^2      | ~50 m^2     |
+|     50 |        6-7 | 6x10m      | 60 m^2      | ~38 m^2     |
+
+- Bei realistisch 35-45 Gaesten -> *6x8m Zelt* ist der Sweet Spot
+  (komfortabel, viel Aussenraum, kleinere Bauteile fuers Treppenhaus)
+- Bei sicher 50+ -> 6x10m, dann Stangenlaenge beim Anbieter pruefen
+
+Beispiel-Layout 6x10m Zelt + Bar/Buffet:
+#+begin_example
++---------------+-----+
+|               |     |
+|     ZELT      | Bar/|
+|     6x10m     | Buf-|
+|               | fet |
+|               | 7x4 |
++---------------+-----+
+        14m
+#+end_example
+
+** Zelt:
+
+- Irgendein party zelt dienst, der es auf und abbaout
+- Bedarf: 5x8m / 6x8m / 6x10m je nach Gaestezahl (siehe Layout-Tabelle)
+
+*** Anbieter (Top 3)
+
+1. *Veranstaltungsservice Rahlfes* (Garbsen, ~12 km)
+   - https://www.zeltverleih-hannover.de/ / https://www.feiern-in-hannover.de/
+   - Tel. 05137-821187-0, info@feiern-in-hannover.de
+   - 15-16 EUR/m^2 inkl. Auf-/Abbau, Transport extra
+   - Nennt Innenhof-Fall (kein LKW-Zugang) explizit auf Website
+
+2. *Party-Zelt-Verleih Langenhagen* (~15 km)
+   - https://www.party-zelt-verleih.de/
+   - Tel. 0511 773190, info@party-zelt-verleih.de
+   - 35 J. Erfahrung in Hannover; Aufbau/Abbau Kerngeschaeft
+
+   - 898.45
+   - ;; 5x6
+     (+ 200 150 100 75)
+     525
+
+
+3. *Luehrs Zeltverleih* (Neustadt am Ruebenberge, ~30 km)
+   - https://www.zelt-luehrs.de/
+   - Eigenes Aufbau-Team (keine Subunternehmer)
+
+*** Weitere Optionen
+
+- HARZ Zelte (Sachsen-Anhalt, ab 20 EUR/m^2): https://www.harz-zelte.de/hannover/
+- M. & M. Zeltverleih (Seevetal): https://hh-zelte.de/zelte
+- Steding Partyservice (Hameln, ~45 km): https://www.steding.de/
+
+*** Innenhof-Aspekt (KRITISCH)
+
+- *Zugang zum Garten nur ueber Hauseingang + Treppenhaus*
+- *Engste Stelle: 2 Tueren* -> alle Bauteile (Stangen, Bodenplatten,
+  Plane, Ballast) muessen durch beide Tueren passen
+- TODO: Tuerbreite + Tuerhoehe messen (lichtes Mass), beide Tueren
+- TODO: Treppenhaus-Stufen, Wendelpunkte, lichte Hoehe in Wendelung
+  pruefen (lange Stangen!)
+- Moderne Alu-Stecksysteme sind oft modular (1-2m Segmente) -> beim
+  Anbieter explizit nach *max. Bauteillaenge* fragen
+- Standardpreise gelten fuer LKW-Anfahrt; Treppenhaus-Tragestrecke
+  = Aufpreis (auf Anfrage)
+- Kein Kran/keine Erdnaegel noetig (Boden = Ballast), das ist gut
+- Vor-Ort-Begehung mit Rahlfes oder Langenhagen *unbedingt* vereinbaren,
+  Fotos vom Treppenhaus + Massen vorab schicken
+
+** Essen
+
+- veganer caterer
+
+*** Anbieter (Top 3, alle 100% vegan)
+
+1. *Klugbeisser* (Steinwedel, ~15 km NO)
+   - https://klugbeisser.com/
+   - Tel. 0177 38 82 899, info@klugbeisser.de
+   - 100% vegan, Bio/saisonal/regional
+   - Caterer ist aus veganen Garten-Grillpartys entstanden -> passt zum Format
+
+
+2. *Kater Menue* (Hannover, Linden-Limmer)
+   - https://www.katermenu.de/
+   - WhatsApp/Tel. 0176 61502796 (Ben)
+   - 100% pflanzlich, klein und persoenlich, Menue gemeinsam kuratiert
+   - Frueh anfragen, Kapazitaeten begrenzt
+# Foodtruck nicht moeglich: Innenhof nur ueber Treppenhaus erreichbar,
+# kein Fahrzeug-Zugang. Mr. Max daher gestrichen.
+# 3. *Mr. Max Foodtruck* (Hildesheim, ~30 km S)
+#    - https://www.max-foodtruck.de/
+#    - Tel. 0157 70422136, trantow.maximilian@gmail.com
+#    - 100% vegan, Streetfood/Foodtruck + Catering
+
+*** Weitere Optionen (gemischt mit veganen Menues)
+
+- Mano Catering (Sitz Berlin, liefert Hannover): 25-35 EUR/Person -
+  https://mano-catering.de/veganes-catering-in-hannover/
+- Vitalo Catering (Hannover): https://vitalo-catering.de/veganes-buffet-hannover/
+- Wahre Gaumenfreunde (Hannover): https://wahregaumenfreunde.de/vegetarisch-und-vegan/
+- Hohenstein Catering (Hannover & Berlin): https://hohenstein-catering.de/
+
+** Music?
+
+- https://www.mediamarkt.de/de/content/entertainment/audio/bluetooth-lautsprecher-in-tests
+
+* Buffet
+
+- Vor dem Zelt
+- Brauche Tische, evlt. noch nach Biertischen fragen
+-
+  xs
+
+
+
+* Getränke
+
+- mate
+- alkoholfreies Bier
+
+* Rede
+
+** Microphon?
+** slides as website
+
+* Website / app
+
+- this rep
+
+
+
+--------------------------------

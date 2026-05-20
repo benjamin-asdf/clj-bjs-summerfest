@@ -16,7 +16,7 @@
    Defaults to morph against ids embedded in the HTML."
   ([html] (patch-elements html nil))
   ([html {:keys [selector mode]}]
-   (let [lines (str/split-lines (or html ""))
+   (let [lines (str/split-lines (clojure.core/str (or html "")))
          data (cond->> (map #(clojure.core/str "elements " %) lines)
                 mode (cons (clojure.core/str "mode " (name mode)))
                 selector (cons (clojure.core/str "selector " selector)))]

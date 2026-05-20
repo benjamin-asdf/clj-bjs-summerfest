@@ -2,7 +2,7 @@
 
 (def translations
   {:de
-   {;; Nav
+   { ;; Nav
     :nav/home "Startseite"
     :nav/contact "Kontakt"
     :nav/directions "Anfahrt"
@@ -15,19 +15,46 @@
     ;; Home
     :home/title "Willkommen bei Bennis Sommerfestle"
     :home/subtitle "Hey %s! Schön, dass du da bist."
+    :home/bookmark-hint "Tipp: Speicher diese Seite als Lesezeichen, damit du den Link nicht verlierst."
+    :home/bookmark-dismiss "Hinweis schließen"
+
+    ;; Welcome (first visit)
+    :welcome/title "Willkommen!"
+    :welcome/lead "Schön, dass du da bist. Wie sollen wir dich nennen?"
+    :welcome/label "Dein Anzeigename"
+    :welcome/continue "Los geht's"
+    :welcome/hint "Du kannst deinen Namen später jederzeit oben in der Navigation ändern."
+
+    ;; Event info panel
+    :event/when "Wann"
+    :event/where "Wo"
+    :event/time "08.08.2026; ab 13:00 Uhr. Essen ab 14:30 Uhr."
+    :event/address "Auf dem Emmerberge 8
+30169 Hannover"
+    :event/photo-alt "Sommerfest"
 
     ;; RSVP
-    :rsvp/heading "Kommt ihr?"
-    :rsvp/we-coming "Wir kommen"
-    :rsvp/i-coming "Ich komme"
-    :rsvp/we-not-coming "Wir können leider nicht"
+    :rsvp/heading "Kommst du?"
+    :rsvp/i-coming "Ja, ich komme"
+    :rsvp/we-coming-two "Wir kommen zu zweit"
+    :rsvp/maybe "Vielleicht"
     :rsvp/i-not-coming "Ich kann leider nicht"
-    :rsvp/status-yes-group "Ihr kommt alle!"
-    :rsvp/status-yes-solo "Du kommst!"
-    :rsvp/status-no "Wir werden euch vermissen."
+    :rsvp/status-yes "Du kommst!"
+    :rsvp/status-yes-plus-one "Ihr kommt zu zweit!"
+    :rsvp/status-maybe "Du überlegst noch."
+    :rsvp/status-no "Schade"
     :rsvp/info-label "Gibt es etwas, das wir wissen sollten? (Allergien, Sonderwünsche, etc.)"
     :rsvp/info-placeholder "Sag uns Bescheid..."
     :rsvp/save "Speichern"
+    :rsvp/plus-one-intro "Hier ist der Link für deine Begleitung:"
+    :rsvp/plus-one-note "Schick ihn an deine Begleitung. Sie kann dann selbst zusagen, im Chat schreiben und Fotos hochladen."
+    :rsvp/plus-one-share-text "Hier ist dein Link fürs Sommerfest:"
+
+    ;; Share
+    :share/copy "Kopieren"
+    :share/copied "Kopiert!"
+    :share/share "Teilen"
+    :share/title "Bennis Sommerfestle"
 
     ;; Contact
     :contact/title "Kontakt"
@@ -127,19 +154,46 @@
     ;; Home
     :home/title "Welcome to Bennis Sommerfestle"
     :home/subtitle "Hey %s! So glad you're here."
+    :home/bookmark-hint "Tip: bookmark this page so you don't lose your link."
+    :home/bookmark-dismiss "Dismiss hint"
+
+    ;; Welcome (first visit)
+    :welcome/title "Welcome!"
+    :welcome/lead "So glad you're here. What should we call you?"
+    :welcome/label "Your display name"
+    :welcome/continue "Let's go"
+    :welcome/hint "You can change your name any time from the top navigation."
+
+    ;; Event info panel
+    :event/when "When"
+    :event/where "Where"
+    :event/time "08.08.2026; Start: 1pm Food: 2:30pm"
+    :event/address "Auf dem Emmerberge 8
+30169 Hannover"
+    :event/photo-alt "Summer Fest"
 
     ;; RSVP
     :rsvp/heading "Are you coming?"
-    :rsvp/we-coming "We're coming"
-    :rsvp/i-coming "I'm coming"
-    :rsvp/we-not-coming "We can't make it"
+    :rsvp/i-coming "Yes, I'm coming"
+    :rsvp/we-coming-two "We're coming as a pair"
+    :rsvp/maybe "Maybe"
     :rsvp/i-not-coming "I can't make it"
-    :rsvp/status-yes-group "You're all coming!"
-    :rsvp/status-yes-solo "You're coming!"
+    :rsvp/status-yes "You're coming!"
+    :rsvp/status-yes-plus-one "You're coming as a pair!"
+    :rsvp/status-maybe "You're still thinking it over."
     :rsvp/status-no "We'll miss you."
     :rsvp/info-label "Anything we should know? (allergies, special needs, etc.)"
     :rsvp/info-placeholder "Tell us anything..."
     :rsvp/save "Save"
+    :rsvp/plus-one-intro "Here's the link for your +1:"
+    :rsvp/plus-one-note "Send it to your +1. They'll be able to RSVP themselves, chat and upload photos."
+    :rsvp/plus-one-share-text "Here's your link for the summer fest:"
+
+    ;; Share
+    :share/copy "Copy"
+    :share/copied "Copied!"
+    :share/share "Share"
+    :share/title "Bennis Sommerfestle"
 
     ;; Contact
     :contact/title "Contact"

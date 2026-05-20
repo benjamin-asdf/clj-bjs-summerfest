@@ -182,10 +182,25 @@
     (-> (resp/redirect referer)
         (assoc :session (merge (:session req) {:locale locale})))))
 
+(defn- secondary-info
+  "When `user` is a primary, return {:user secondary :token-url \"...\"} or nil if no
+   secondary minted yet. The token-url is what the primary forwards to their +1."
+  [req user]
+  (when (db/primary? user)
+    (when-let [sec (db/get-secondary-user-of (:id user))]
+      (let [base-url (str (name (:scheme req))
+                          "://"
+                          (get-in req [:headers "host"])
+                          (u "/login?token=") (:token sec))]
+        {:user sec :token-url base-url}))))
+
 (defn home-handler [req]
-  (let [user (:user req)
-        rsvp (db/get-rsvp (:id user))]
-    (html-response (views/home-page (ctx req) rsvp))))
+  (let [user (:user req)]
+    (if (:name-confirmed user)
+      (html-response (views/home-page (ctx req)
+                                      (db/get-rsvp (:id user))
+                                      (secondary-info req user)))
+      (html-response (views/welcome-page (ctx req))))))
 
 (defn contact-handler [req]
   (html-response (views/contact-page (ctx req))))
@@ -215,6 +230,31 @@
 
 ;; --- API Handlers ---
 
+(defn- valid-attending-for [user value]
+  (and (db/attending-values value)
+       (or (db/primary? user) (not= "yes_plus_one" value))))
+
+(defn- ensure-secondary!
+  "Mint a secondary user for a primary if one doesn't yet exist. No-op for
+   secondary users or for primaries who already have one. Returns the secondary
+   user (existing or freshly minted)."
+  [user]
+  (when (db/primary? user)
+    (or (db/get-secondary-user-of (:id user))
+        (db/create-secondary-user! (:id user)))))
+
+(defn- sync-rsvp-async!
+  "Best-effort fire-and-forget Google Sheets sync for one RSVP row. Adds the
+   parent's display name when the user is a +1, since the sheet wants that
+   context but the session user map doesn't carry it."
+  [user attending info]
+  (future
+    (let [enriched (if-let [pid (:parent-user-id user)]
+                     (let [parent (db/get-user-by-id pid)]
+                       (assoc user :parent-name (db/effective-name parent)))
+                     user)]
+      (sheets/sync-rsvp! enriched attending info))))
+
 (defn rsvp-handler [req]
   (let [user (:user req)
         locale (get-locale req)
@@ -222,12 +262,14 @@
         attending (:attending body)
         rsvp (db/get-rsvp (:id user))
         info (or (:additional-info rsvp) "")]
-    (when (some? attending)
+    (when (valid-attending-for user attending)
+      (when (= "yes_plus_one" attending) (ensure-secondary! user))
       (db/upsert-rsvp! (:id user) attending info)
-      (future (sheets/sync-rsvp! (:name user) (:group-size user) attending info)))
-    (let [updated-rsvp (db/get-rsvp (:id user))]
+      (sync-rsvp-async! user attending info))
+    (let [updated-rsvp (db/get-rsvp (:id user))
+          secondary (secondary-info req user)]
       (sse/sse-response
-       (sse/patch-elements (views/rsvp-fragment locale user updated-rsvp))))))
+       (sse/patch-elements (views/rsvp-fragment locale user updated-rsvp secondary))))))
 
 (defn rsvp-info-handler [req]
   (let [user (:user req)
@@ -235,12 +277,13 @@
         body (or (parse-json-body req) {})
         info (or (:additionalInfo body) "")
         rsvp (db/get-rsvp (:id user))
-        attending (if rsvp (:attending rsvp) true)]
+        attending (or (:attending rsvp) "yes")]
     (db/upsert-rsvp! (:id user) attending info)
-    (future (sheets/sync-rsvp! (:name user) (:group-size user) attending info))
-    (let [updated-rsvp (db/get-rsvp (:id user))]
+    (sync-rsvp-async! user attending info)
+    (let [updated-rsvp (db/get-rsvp (:id user))
+          secondary (secondary-info req user)]
       (sse/sse-response
-       (sse/patch-elements (views/rsvp-fragment locale user updated-rsvp))))))
+       (sse/patch-elements (views/rsvp-fragment locale user updated-rsvp secondary))))))
 
 (defn- valid-upload? [file]
   (and (map? file)
@@ -319,6 +362,18 @@
        (sse/patch-elements (views/nav-user-html locale updated))
        (sse/patch-signals {:showNameEdit false
                            :newDisplayName (db/effective-name updated)})))))
+
+(defn welcome-confirm-handler
+  "First-visit display-name confirmation. Plain form POST so we get a clean
+   redirect to the home page once the user confirms (or just keeps the random
+   name by hitting save with it unchanged)."
+  [req]
+  (let [user (:user req)
+        raw (or (get-in req [:form-params "displayName"]) "")
+        new-name (let [t (clojure.string/trim raw)]
+                   (when (seq t) (subs t 0 (min 30 (count t)))))]
+    (db/update-display-name! (:id user) new-name)
+    (resp/redirect (u "/") :see-other)))
 
 ;; --- Upload file serving ---
 
@@ -410,6 +465,7 @@
      ["/api/chat/pin" {:post chat-pin-handler :middleware [require-auth]}]
      ["/api/chat/older" {:get chat-older-handler :middleware [require-auth]}]
      ["/api/profile/display-name" {:post display-name-handler :middleware [require-auth]}]
+     ["/api/profile/welcome" {:post welcome-confirm-handler :middleware [require-auth]}]
      ["/uploads/:filename" {:get serve-upload}]
      ["/thumbs/:filename" {:get serve-thumb}]])
    (reitit/routes

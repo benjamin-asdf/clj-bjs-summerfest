@@ -1,6 +1,5 @@
 (ns summerfest.views
-  (:require [hiccup.core :as h]
-            [hiccup.page :as page]
+  (:require [hiccup2.core :as h]
             [clojure.string :as str]
             [summerfest.db :as db]
             [summerfest.i18n :refer [t]]
@@ -14,6 +13,12 @@
       (str/replace "'" "\\'")
       (str/replace "\n" "\\n")
       (str/replace "\r" "\\r")))
+
+(defn- html5-page
+  "Render an HTML5 document. Auto-escapes strings (hiccup2)."
+  [& body]
+  (str "<!DOCTYPE html>\n"
+       (h/html (into [:html] body))))
 
 (defn nav-user-html
   "Clickable navbar greeting that opens the display-name modal."
@@ -53,14 +58,14 @@
   [title {:keys [user locale] :or {locale :de}} & body]
   (let [other-locale (if (= locale :de) :en :de)
         other-label (if (= locale :de) "EN" "DE")]
-    (page/html5
+    (html5-page
      [:head
       [:meta {:charset "utf-8"}]
       [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
       [:title (str title " | " (t locale :nav/brand))]
       [:link {:rel "stylesheet" :href (u "/style.css")}]
       [:link {:rel "icon" :href "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>S</text></svg>"}]
-      [:script (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";")]
+      [:script (h/raw (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";"))]
       [:script {:type "module" :src "https://cdn.jsdelivr.net/gh/starfederation/datastar/bundles/datastar.js"}]]
      [:body
       (when user
@@ -77,7 +82,7 @@
         ;; [:a {:href (u "/directions")} (t locale :nav/directions)]
         [:a {:href (u "/gallery")} (t locale :nav/gallery)]
         [:a {:href (u "/chat")} (t locale :nav/chat)]
-        [:a {:href (u "/party")} (t locale :nav/party)]
+        ;; [:a {:href (u "/party")} (t locale :nav/party)]
         (when user
           (nav-user-html locale user))
         [:a.lang-switch {:href (u (str "/set-locale?locale=" (name other-locale)))} other-label]]]
@@ -91,23 +96,23 @@
 (defn party-layout
   "Minimal fullscreen layout for party game pages."
   [title locale mode & body]
-  (page/html5
+  (html5-page
    [:head
     [:meta {:charset "utf-8"}]
     [:meta {:name "viewport" :content "width=device-width, initial-scale=1, user-scalable=no"}]
     [:title (str title " | " (t locale :nav/brand))]
     [:link {:rel "stylesheet" :href (u "/style.css")}]
-    [:script (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";")]]
+    [:script (h/raw (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";"))]]
    [:body {:data-party-mode mode} body]))
 
 (defn login-page [locale]
-  (page/html5
+  (html5-page
    [:head
     [:meta {:charset "utf-8"}]
     [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
     [:title (t locale :login/title)]
     [:link {:rel "stylesheet" :href (u "/style.css")}]
-    [:script (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";")]]
+    [:script (h/raw (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";"))]]
    [:body
     [:main.container.center
      [:div.card.login-card
@@ -116,13 +121,13 @@
       [:p.small (t locale :login/lost-link)]]]]))
 
 (defn invalid-token-page [locale]
-  (page/html5
+  (html5-page
    [:head
     [:meta {:charset "utf-8"}]
     [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
     [:title (t locale :login/invalid-title)]
     [:link {:rel "stylesheet" :href (u "/style.css")}]
-    [:script (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";")]]
+    [:script (h/raw (str "window.SUMMERFEST_BASE=" (pr-str base-path) ";"))]]
    [:body
     [:main.container.center
      [:div.card.login-card
@@ -132,25 +137,88 @@
 
 ;; --- RSVP ---
 
-(defn rsvp-fragment [locale user rsvp]
-  (let [group? (> (or (:group-size user) 2) 1)
-        yes-class (str "btn btn-yes" (when (and rsvp (:attending rsvp)) " active"))
-        no-class (str "btn btn-no" (when (and rsvp (not (:attending rsvp))) " active"))]
+(defn- rsvp-button
+  "Render one RSVP choice button. `value` is the attending text written to the
+   server; `current` is the user's current attending value (for the active
+   highlight). Setting the `attending` signal first lets datastar serialize it
+   into the POST body."
+  [locale current value extra-class i18n-key]
+  (let [active? (= current value)
+        klass (str "btn " extra-class (when active? " active"))]
+    [:button {:class klass
+              "data-on:click" (str "$attending = '" value "'; @post('" (u "/api/rsvp") "')")}
+     (t locale i18n-key)]))
+
+(defn- secondary-link-panel
+  "Panel shown to the primary user when they've selected 'wir kommen zu zweit'.
+   Holds the +1's magic-link plus copy/share affordances. The link is rendered
+   server-side; copy/share are JS-only enhancements."
+  [locale {:keys [token-url]}]
+  (h/html
+   [:div.secondary-panel
+    [:p.secondary-intro (t locale :rsvp/plus-one-intro)]
+    [:div.secondary-link-row
+     [:input.secondary-link-input
+      {:type "text"
+       :readonly true
+       :value token-url
+       :onclick "this.select()"}]
+     [:button.btn.btn-copy
+      {:type "button"
+       :data-url token-url
+       :data-copied-label (t locale :share/copied)
+       :onclick (str "(function(b){"
+                     "navigator.clipboard&&navigator.clipboard.writeText(b.dataset.url);"
+                     "var o=b.textContent;b.textContent=b.dataset.copiedLabel;"
+                     "setTimeout(function(){b.textContent=o},1500);"
+                     "})(this)")}
+      (t locale :share/copy)]
+     [:button.btn.btn-share
+      {:type "button"
+       :data-url token-url
+       :data-share-title (t locale :share/title)
+       :data-share-text (t locale :rsvp/plus-one-share-text)
+       :onclick (str "(function(b){"
+                     "if(navigator.share){"
+                     "navigator.share({title:b.dataset.shareTitle,text:b.dataset.shareText,url:b.dataset.url})"
+                     ".catch(function(){});"
+                     "}else{"
+                     "navigator.clipboard&&navigator.clipboard.writeText(b.dataset.url);"
+                     "alert(b.dataset.shareText+'\\n'+b.dataset.url)"
+                     "}})(this)")}
+      (t locale :share/share)]]
+    [:p.secondary-note (t locale :rsvp/plus-one-note)]]))
+
+(defn rsvp-fragment
+  "Renders the RSVP card. `secondary` is {:user :token-url} when the primary has
+   minted a +1 (else nil); ignored entirely for secondary users."
+  [locale user rsvp secondary]
+  (let [primary? (db/primary? user)
+        attending (:attending rsvp)
+        status-key (case attending
+                     "yes" :rsvp/status-yes
+                     "yes_plus_one" :rsvp/status-yes-plus-one
+                     "maybe" :rsvp/status-maybe
+                     "no" :rsvp/status-no
+                     nil)
+        status-class (case attending
+                       "no" "status-no"
+                       "maybe" "status-maybe"
+                       "status-yes")]
     (h/html
      [:div#rsvp-form.card
       [:h2 (t locale :rsvp/heading)]
-      (when rsvp
+      (when status-key
         [:div.rsvp-status
-         (if (:attending rsvp)
-           [:p.status-yes (t locale (if group? :rsvp/status-yes-group :rsvp/status-yes-solo))]
-           [:p.status-no (t locale :rsvp/status-no)])])
+         [:p {:class status-class} (t locale status-key)]])
       [:div.rsvp-buttons
-       [:button {:class yes-class
-                 "data-on:click" (str "$attending = true; @post('" (u "/api/rsvp") "')")}
-        (t locale (if group? :rsvp/we-coming :rsvp/i-coming))]
-       [:button {:class no-class
-                 "data-on:click" (str "$attending = false; @post('" (u "/api/rsvp") "')")}
-        (t locale (if group? :rsvp/we-not-coming :rsvp/i-not-coming))]]
+       (rsvp-button locale attending "yes" "btn-yes" :rsvp/i-coming)
+       (when primary?
+         (rsvp-button locale attending "yes_plus_one" "btn-yes-plus" :rsvp/we-coming-two))
+       (rsvp-button locale attending "maybe" "btn-maybe" :rsvp/maybe)
+       (rsvp-button locale attending "no" "btn-no" :rsvp/i-not-coming)]
+      (when (and primary? (= attending "yes_plus_one") secondary)
+        (secondary-link-panel locale secondary))
       [:div.info-section
        [:label {:for "additional-info"} (t locale :rsvp/info-label)]
        [:textarea#additional-info
@@ -162,20 +230,70 @@
         {"data-on:click" (str "@post('" (u "/api/rsvp/info") "')")}
         (t locale :rsvp/save)]]])))
 
-(defn home-page [ctx rsvp]
+(defn- bookmark-hint
+  "Dismissible 'bookmark me' nudge shown on the home page. Stores dismissal in
+   localStorage so we don't pester returning visitors."
+  [locale]
+  [:div.bookmark-hint {:id "bookmark-hint"}
+   [:span.bookmark-hint-icon "🔖"]
+   [:span.bookmark-hint-text (t locale :home/bookmark-hint)]
+   [:button.bookmark-hint-close
+    {:type "button"
+     :aria-label (t locale :home/bookmark-dismiss)
+     :onclick (str "try{localStorage.setItem('summerfest:bm','1')}catch(e){}"
+                   "this.parentElement.remove()")}
+    "×"]
+   [:script (h/raw "
+(function(){var h=document.getElementById('bookmark-hint');if(!h)return;
+try{if(localStorage.getItem('summerfest:bm'))h.remove()}catch(e){}})();")]])
+
+(defn- event-card
+  "Top panel on the home page: event photo + address + time."
+  [locale]
+  [:div.card.event-card
+   [:img.event-photo {:src (u "/event-photo.jpg")
+                      :alt (t locale :event/photo-alt)}]
+   [:dl.event-details
+    [:dt (t locale :event/when)] [:dd (t locale :event/time)]
+    [:dt (t locale :event/where)] [:dd (t locale :event/address)]]])
+
+(defn welcome-page
+  "First-visit prompt: ask the user to confirm or replace the auto-generated
+   random animal name. Plain form POST → redirect to /, single field, autofocus."
+  [{:keys [user locale] :as ctx}]
+  (layout (t locale :welcome/title) ctx
+          [:div.card.welcome-card
+           [:h1 (t locale :welcome/title)]
+           [:p.welcome-lead (t locale :welcome/lead)]
+           [:form.welcome-form
+            {:action (u "/api/profile/welcome")
+             :method "post"}
+            [:label.welcome-label {:for "welcome-name"} (t locale :welcome/label)]
+            [:input#welcome-name.welcome-input
+             {:type "text"
+              :name "displayName"
+              :maxlength "30"
+              :required true
+              :autofocus true
+              :value (db/effective-name user)}]
+            [:button.btn.btn-save.welcome-save {:type "submit"}
+             (t locale :welcome/continue)]
+            [:p.welcome-hint.small (t locale :welcome/hint)]]]))
+
+(defn home-page [ctx rsvp secondary]
   (let [{:keys [user locale]} ctx]
     (layout (t locale :nav/home) ctx
-            [:div.hero
-             [:h1 (t locale :home/title)]
-             [:p.subtitle (t locale :home/subtitle (db/effective-name user))]]
+            (bookmark-hint locale)
+            (event-card locale)
             [:div {:id "rsvp-section"
                    :data-signals (str "{attending: "
-                                      (if rsvp (str (:attending rsvp)) "null")
+                                      (if-let [a (:attending rsvp)]
+                                        (str "'" a "'")
+                                        "null")
                                       ", additionalInfo: '"
-                                      (-> (or (:additional-info rsvp) "")
-                                          (.replace "'" "\\'"))
+                                      (js-string-escape (or (:additional-info rsvp) ""))
                                       "'}")}
-             (rsvp-fragment locale user rsvp)])))
+             (rsvp-fragment locale user rsvp secondary)])))
 
 ;; --- Impressum ---
 
@@ -262,15 +380,24 @@
              [:button.lightbox-prev {:type "button" :aria-label (t locale :gallery/prev)} "‹"]
              [:img#lightbox-img.lightbox-img {:alt ""}]
              [:button.lightbox-next {:type "button" :aria-label (t locale :gallery/next)} "›"]]
-            [:script "
+            [:script (h/raw "
 (function(){
   var box=document.getElementById('lightbox'),img=document.getElementById('lightbox-img');
   if(!box||!img)return;
-  var grid=document.getElementById('photo-grid'),idx=-1,srcs=[];
+  var grid=document.getElementById('photo-grid'),idx=-1,srcs=[],fromPop=false;
   function refresh(){srcs=Array.from(grid.querySelectorAll('.photo-card img')).map(function(i){return i.dataset.full||i.currentSrc||i.src})}
   function show(i){if(!srcs.length)return;idx=(i+srcs.length)%srcs.length;img.src=srcs[idx]}
-  function open(i){refresh();show(i);box.hidden=false;document.body.style.overflow='hidden'}
-  function close(){box.hidden=true;img.removeAttribute('src');document.body.style.overflow=''}
+  function open(i){
+    refresh();show(i);box.hidden=false;document.body.style.overflow='hidden';
+    history.pushState({__lightbox:true},'');
+  }
+  function close(){
+    if(box.hidden)return;
+    box.hidden=true;img.removeAttribute('src');document.body.style.overflow='';
+    if(document.fullscreenElement){try{document.exitFullscreen()}catch(e){}}
+    if(!fromPop&&history.state&&history.state.__lightbox){history.back()}
+    fromPop=false;
+  }
   if(grid){grid.addEventListener('click',function(e){
     var card=e.target.closest('.photo-card');if(!card)return;
     var cards=Array.from(grid.querySelectorAll('.photo-card'));
@@ -282,8 +409,8 @@
   box.addEventListener('click',function(e){if(e.target===box)close()});
   img.addEventListener('click',function(e){
     e.stopPropagation();
-    var fn=img.requestFullscreen||img.webkitRequestFullscreen;
-    var p=fn&&fn.call(img);
+    var fn=box.requestFullscreen||box.webkitRequestFullscreen;
+    var p=fn&&fn.call(box);
     if(!p)window.open(img.src,'_blank','noopener');
     else if(p.catch)p.catch(function(){window.open(img.src,'_blank','noopener')})
   });
@@ -293,8 +420,11 @@
     else if(e.key==='ArrowLeft')show(idx-1);
     else if(e.key==='ArrowRight')show(idx+1)
   });
+  window.addEventListener('popstate',function(){
+    if(!box.hidden){fromPop=true;close()}
+  });
 })();
-"])))
+")])))
 
 ;; --- Chat ---
 
@@ -399,7 +529,7 @@
                [:button.btn.btn-send {"data-on:click" (str "@post('" (u "/api/chat/send") "')")} (t locale :chat/send)]]]
              [:div.card.pinned-sidebar
               (pinned-messages-html locale pinned-messages (:id user))]]
-            [:script "
+            [:script (h/raw "
 (function(){
   var m=document.getElementById('chat-messages'),b=document.getElementById('scroll-btn'),us=false;
   if(!m||!b)return;
@@ -411,7 +541,7 @@
   b.addEventListener('click',function(){m.scrollTo({top:m.scrollHeight,behavior:'smooth'})});
   new MutationObserver(function(){if(!us){m.scrollTop=m.scrollHeight}}).observe(m,{childList:true,subtree:true});
 })();
-"])))
+")])))
 
 ;; --- Party Games ---
 
