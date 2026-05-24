@@ -124,26 +124,3 @@
     (when (not= first-row (mapv str headers))
       (update-range! (str tab-name "!A1") [headers]))))
 
-(defn sync-rsvp!
-  "Sync one RSVP row to Google Sheets. Silently skips if not configured.
-   Columns: user-name, role (primary/+1), parent-name (when +1), attending text,
-   info, timestamp. Append-only — the sheet keeps the full history; downstream
-   logic decides which row is current per user."
-  [user attending additional-info]
-  (when-let [token (get-access-token)]
-    (try
-      (let [primary? (nil? (:parent-user-id user))
-            display (or (:display-name user) (:name user))
-            row [display
-                 (if primary? "primary" "+1")
-                 (or (:parent-name user) "")
-                 (or attending "")
-                 (or additional-info "")
-                 (.toString (java.time.Instant/now))]]
-        (http/post (api-url "/values/A:F:append")
-                   {:headers (auth-headers token)
-                    :query-params {"valueInputOption" "RAW"
-                                   "insertDataOption" "INSERT_ROWS"}
-                    :body (json/generate-string {:values [row]})}))
-      (catch Exception e
-        (println "Google Sheets sync error:" (.getMessage e))))))

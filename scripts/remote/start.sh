@@ -48,6 +48,9 @@ export BASE_PATH
 export UPLOAD_DIR
 export DB_HOST DB_PORT DB_NAME DB_USER DB_PASSWORD
 export SESSION_SECRET
+# Optional Google Sheets integration — sheets.clj silently skips when unset.
+[ -n "${GOOGLE_SERVICE_KEY_JSON:-}" ] && export GOOGLE_SERVICE_KEY_JSON
+[ -n "${GOOGLE_SHEETS_ID:-}" ] && export GOOGLE_SHEETS_ID
 
 # `-R:prod` pulls nrepl into the classpath; `-m summerfest.core` runs main.
 nohup clojure -J-Xmx512m -J-Xms128m -R:prod -m summerfest.core \

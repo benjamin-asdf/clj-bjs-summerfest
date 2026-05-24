@@ -3,6 +3,7 @@
             [summerfest.views :as views]
             [summerfest.sse :as sse]
             [summerfest.sheets :as sheets]
+            [summerfest.invites :as invites]
             [summerfest.i18n :as i18n]
             [summerfest.config :refer [u]]
             [reitit.ring :as reitit]
@@ -208,9 +209,6 @@
 (defn impressum-handler [req]
   (html-response (views/impressum-page (ctx req))))
 
-(defn directions-handler [req]
-  (html-response (views/directions-page (ctx req))))
-
 (defn- photo-file-renderable? [photo]
   (let [f (io/file upload-dir (:filename photo))]
     (and (.exists f) (pos? (.length f)))))
@@ -237,23 +235,27 @@
 (defn- ensure-secondary!
   "Mint a secondary user for a primary if one doesn't yet exist. No-op for
    secondary users or for primaries who already have one. Returns the secondary
-   user (existing or freshly minted)."
+   user (existing or freshly minted). On a fresh mint, fires off a best-effort
+   write-back to the Invites sheet so the secondary's token lands in the
+   pre-allocated row below the primary."
   [user]
   (when (db/primary? user)
     (or (db/get-secondary-user-of (:id user))
-        (db/create-secondary-user! (:id user)))))
+        (let [sec (db/create-secondary-user! (:id user))]
+          (future
+            (try (invites/write-back-secondary! user sec)
+                 (catch Exception e
+                   (println "Invites write-back failed:" (.getMessage e)))))
+          sec))))
 
 (defn- sync-rsvp-async!
-  "Best-effort fire-and-forget Google Sheets sync for one RSVP row. Adds the
-   parent's display name when the user is a +1, since the sheet wants that
-   context but the session user map doesn't carry it."
-  [user attending info]
+  "Best-effort fire-and-forget mirror of the user's RSVP into the Invites tab
+   (column C of their row, matched by token)."
+  [user attending]
   (future
-    (let [enriched (if-let [pid (:parent-user-id user)]
-                     (let [parent (db/get-user-by-id pid)]
-                       (assoc user :parent-name (db/effective-name parent)))
-                     user)]
-      (sheets/sync-rsvp! enriched attending info))))
+    (try (invites/sync-rsvp-cell! user attending)
+         (catch Exception e
+           (println "Invites RSVP sync failed:" (.getMessage e))))))
 
 (defn rsvp-handler [req]
   (let [user (:user req)
@@ -265,7 +267,7 @@
     (when (valid-attending-for user attending)
       (when (= "yes_plus_one" attending) (ensure-secondary! user))
       (db/upsert-rsvp! (:id user) attending info)
-      (sync-rsvp-async! user attending info))
+      (sync-rsvp-async! user attending))
     (let [updated-rsvp (db/get-rsvp (:id user))
           secondary (secondary-info req user)]
       (sse/sse-response
@@ -279,7 +281,7 @@
         rsvp (db/get-rsvp (:id user))
         attending (or (:attending rsvp) "yes")]
     (db/upsert-rsvp! (:id user) attending info)
-    (sync-rsvp-async! user attending info)
+    (sync-rsvp-async! user attending)
     (let [updated-rsvp (db/get-rsvp (:id user))
           secondary (secondary-info req user)]
       (sse/sse-response
@@ -449,7 +451,6 @@
      ["/set-locale" {:get set-locale-handler}]
      ["/" {:get home-handler :middleware [require-auth]}]
      ["/contact" {:get contact-handler :middleware [require-auth]}]
-     ["/directions" {:get directions-handler :middleware [require-auth]}]
      ["/gallery" {:get gallery-handler :middleware [require-auth]}]
      ["/chat" {:get chat-handler :middleware [require-auth]}]
      ["/party" {:get party-hub-handler :middleware [require-auth]}]
