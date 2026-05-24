@@ -210,3 +210,13 @@
       (write-row! (inc p-row)
                   {:name display :lang "de" :rsvp ""
                    :token (str (:token secondary))}))))
+
+(defn write-back-secondary-name!
+  "Update only column A (Name) on the secondary user's row in Invites. Used
+   when the primary edits their +1's display name from the RSVP panel. Empty
+   string clears the cell. No-op when sheets isn't configured or the secondary
+   isn't in the sheet."
+  [secondary]
+  (when-let [row (row-of-user secondary)]
+    (sheets/update-range! (str invites-tab "!A" row)
+                          [[(or (:display-name secondary) "")]])))

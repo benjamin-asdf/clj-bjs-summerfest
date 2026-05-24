@@ -48,7 +48,9 @@
 (defn create-secondary-user!
   "Mint a secondary (+1) user owned by parent-user-id, with a random German display
    name like \"Fauler Fuchs\". The base name field stores the same generated name so
-   admin-side listings remain meaningful even if display_name is later cleared."
+   admin-side listings remain meaningful even if display_name is later cleared.
+   `name_confirmed` stays false until either the primary names them via the
+   RSVP panel or the secondary themselves confirms via the welcome page."
   [parent-user-id]
   (let [generated (names/random-german-name)]
     (q1 "INSERT INTO users (name, display_name, parent_user_id, group_size)

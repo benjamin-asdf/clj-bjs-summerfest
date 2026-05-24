@@ -5,7 +5,6 @@
    { ;; Nav
     :nav/home "Startseite"
     :nav/contact "Kontakt"
-    :nav/directions "Anfahrt"
     :nav/gallery "Galerie"
     :nav/chat "Chat"
     :nav/party "Party"
@@ -28,10 +27,12 @@
     ;; Event info panel
     :event/when "Wann"
     :event/where "Wo"
-    :event/time "08.08.2026; ab 13:00 Uhr. Essen ab 14:30 Uhr."
+    :event/time "08.08.2026; ab 13:00 Uhr. Essen ab 14:30 Uhr. Open End."
     :event/address "Auf dem Emmerberge 8
 30169 Hannover"
     :event/photo-alt "Sommerfest"
+    :event/host-alt "Dein Gastgeber"
+    :event/invite "Ihr seid herzlich zu meinem Sommerfestle eingeladen. Ein kleines Sit-in — auf gut Schwäbisch: eine Hocketse — unterm Zeltdach, an Bierbänken im Hannoveraner Innenhof, mit veganem Essen, kalter Mate und viel Zeit. Mitbringen müsst ihr nichts außer euch selbst; Kuchen oder ähnlicher Nachtisch ist immer willkommen."
 
     ;; RSVP
     :rsvp/heading "Kommst du?"
@@ -43,12 +44,14 @@
     :rsvp/status-yes-plus-one "Ihr kommt zu zweit!"
     :rsvp/status-maybe "Du überlegst noch."
     :rsvp/status-no "Schade"
-    :rsvp/info-label "Gibt es etwas, das wir wissen sollten? (Allergien, Sonderwünsche, etc.)"
-    :rsvp/info-placeholder "Sag uns Bescheid..."
+    :rsvp/info-label "Möchtest du uns etwas mitteilen?"
+    :rsvp/info-placeholder "Allergien"
     :rsvp/save "Speichern"
     :rsvp/plus-one-intro "Hier ist der Link für deine Begleitung:"
     :rsvp/plus-one-note "Schick ihn an deine Begleitung. Sie kann dann selbst zusagen, im Chat schreiben und Fotos hochladen."
     :rsvp/plus-one-share-text "Hier ist dein Link fürs Sommerfest:"
+    :rsvp/plus-one-name-label "Name deiner Begleitung"
+    :rsvp/plus-one-name-placeholder "Name deiner Begleitung"
 
     ;; Share
     :share/copy "Kopieren"
@@ -63,16 +66,6 @@
     :contact/phone "Telefon"
     :contact/or-chat "Oder nutze einfach den "
     :contact/chat-link "Chat"
-
-    ;; Directions
-    :directions/title "Anfahrt"
-    :directions/address "Adresse"
-    :directions/by-car "Mit dem Auto"
-    :directions/by-car-text "Parkplätze vor Ort. Folge den Schildern ab der Autobahnausfahrt."
-    :directions/by-transit "Mit öffentlichen Verkehrsmitteln"
-    :directions/by-transit-text "Buslinie 42 bis \"Garten-Haltestelle\", dann 5 Min. zu Fuß."
-    :directions/map "Karte"
-    :directions/map-placeholder "(Karte wird hier eingebettet)"
 
     ;; Gallery
     :gallery/title "Fotogalerie"
@@ -92,6 +85,10 @@
     :profile/save "Speichern"
     :profile/cancel "Abbrechen"
 
+    ;; Generic UI feedback
+    :ui/saving "Speichert…"
+    :ui/saved "✓ Gespeichert"
+
     ;; Chat
     :chat/title "Gäste-Chat"
     :chat/placeholder "Nachricht schreiben..."
@@ -106,10 +103,10 @@
     ;; Login
     :login/title "Bennis Sommerfestle"
     :login/use-link "Bitte nutze den Link, den du erhalten hast."
-    :login/lost-link "Link verloren? Kontaktiere den Veranstalter."
+    :login/lost-link "Link verloren? Kontaktiere Benni."
     :login/invalid-title "Ups"
     :login/invalid-text "Dieser Link scheint nicht zu funktionieren."
-    :login/invalid-hint "Prüfe den Link nochmal oder kontaktiere den Veranstalter."
+    :login/invalid-hint "Prüfe den Link nochmal oder kontaktiere Benni."
 
     ;; Party Games
     :party/title "Party-Spiele"
@@ -136,7 +133,10 @@
     :impressum/title "Impressum"
     :impressum/responsible "Verantwortlich"
     :impressum/name "Benni"
-    :impressum/address "[Adresse hier eintragen]"
+    :impressum/address "Benjamin Schwerdtner
+Auf dem Emmerberge 8
+30169 Hannover
+"
     :impressum/contact "Kontakt"
     :impressum/disclaimer "Diese Seite ist eine private Einladung zu einer privaten Feier."}
 
@@ -144,7 +144,6 @@
    {;; Nav
     :nav/home "Home"
     :nav/contact "Contact"
-    :nav/directions "Getting Here"
     :nav/gallery "Gallery"
     :nav/chat "Chat"
     :nav/party "Party"
@@ -167,10 +166,12 @@
     ;; Event info panel
     :event/when "When"
     :event/where "Where"
-    :event/time "08.08.2026; Start: 1pm Food: 2:30pm"
+    :event/time "08.08.2026; Start: 1pm Food: 2:30pm. Open End."
     :event/address "Auf dem Emmerberge 8
 30169 Hannover"
     :event/photo-alt "Summer Fest"
+    :event/host-alt "Your host"
+    :event/invite "You're warmly invited to my Sommerfestle. A little sit-in — or, in Swabian: a Hocketse — under a tent, on beer benches in a Hannover courtyard garden, with vegan food, cold Mate and plenty of time. Bring nothing but yourselves; cake or any kind of dessert is always welcome."
 
     ;; RSVP
     :rsvp/heading "Are you coming?"
@@ -182,12 +183,14 @@
     :rsvp/status-yes-plus-one "You're coming as a pair!"
     :rsvp/status-maybe "You're still thinking it over."
     :rsvp/status-no "We'll miss you."
-    :rsvp/info-label "Anything we should know? (allergies, special needs, etc.)"
-    :rsvp/info-placeholder "Tell us anything..."
+    :rsvp/info-label "Anything you want to say?"
+    :rsvp/info-placeholder "Allergies"
     :rsvp/save "Save"
     :rsvp/plus-one-intro "Here's the link for your +1:"
     :rsvp/plus-one-note "Send it to your +1. They'll be able to RSVP themselves, chat and upload photos."
     :rsvp/plus-one-share-text "Here's your link for the summer fest:"
+    :rsvp/plus-one-name-label "Your +1's name"
+    :rsvp/plus-one-name-placeholder "Your +1's name"
 
     ;; Share
     :share/copy "Copy"
@@ -202,16 +205,6 @@
     :contact/phone "Phone"
     :contact/or-chat "Or just use the "
     :contact/chat-link "chat"
-
-    ;; Directions
-    :directions/title "How to Get Here"
-    :directions/address "Address"
-    :directions/by-car "By Car"
-    :directions/by-car-text "Parking is available on-site. Follow signs from the highway exit."
-    :directions/by-transit "By Public Transport"
-    :directions/by-transit-text "Take bus line 42 to \"Garden Stop\", then 5 min walk."
-    :directions/map "Map"
-    :directions/map-placeholder "(Map will be embedded here)"
 
     ;; Gallery
     :gallery/title "Photo Gallery"
@@ -231,6 +224,10 @@
     :profile/save "Save"
     :profile/cancel "Cancel"
 
+    ;; Generic UI feedback
+    :ui/saving "Saving…"
+    :ui/saved "✓ Saved"
+
     ;; Chat
     :chat/title "Guest Chat"
     :chat/placeholder "Type a message..."
@@ -245,10 +242,10 @@
     ;; Login
     :login/title "Bennis Sommerfestle"
     :login/use-link "Please use the link you received to enter."
-    :login/lost-link "If you lost your link, contact the organizer."
+    :login/lost-link "If you lost your link, contact Benni."
     :login/invalid-title "Oops"
     :login/invalid-text "This link doesn't seem to work."
-    :login/invalid-hint "Double-check the link or contact the organizer."
+    :login/invalid-hint "Double-check the link or contact Benni."
 
     ;; Party Games
     :party/title "Party Games"
@@ -275,7 +272,10 @@
     :impressum/title "Imprint"
     :impressum/responsible "Responsible"
     :impressum/name "Benni"
-    :impressum/address "[Address goes here]"
+    :impressum/address "Benjamin Schwerdtner
+Auf dem Emmerberge 8
+30169 Hannover
+"
     :impressum/contact "Contact"
     :impressum/disclaimer "This site is a private invitation to a private celebration."}})
 

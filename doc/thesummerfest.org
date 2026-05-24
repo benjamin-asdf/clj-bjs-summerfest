@@ -8,9 +8,7 @@ sheet:
 
 https://docs.google.com/spreadsheets/d/1NSnQagymFIDxLSXD2naspnyURWtR03yHkt33G5Ksfhc/edit?usp=sharing
 
-- 23 Zusagen
-- TODO: Rest einladen
-
+- ca. 30 Gaeste
 
 
 * Location
@@ -18,33 +16,63 @@ https://docs.google.com/spreadsheets/d/1NSnQagymFIDxLSXD2naspnyURWtR03yHkt33G5Ks
 - Hannover Suedstadt: Garten Innenhof
 - *Verfuegbare Flaeche: 7 x 14 m = 98 m^2*
 
+- *Verfuegbare Flaeche fixed: Ist in 2 Bereiche aufgeteilt, ein kleinerer Teil (A) hinten und vorne B.
+- Das laengste Rechteck ist nur (6+7)m x 4.5m
+- Das Rechteck mit den groessten Seiten ist nur 7x7m
+
+   4.5m
+ +--------+
+ |        |
+ |   A    | 6m
+ |        |
+ +--------+----+
+ |             |
+ |             |
+ |    B        |
+ |             |  7m
+ |             |
+ +-------------+
+      7m
+
+
+
+
+
+
 ** Layout / Platzbedarf
 
 - Bierbank-Garnitur (Tisch 220x50cm + 2 Baenke): 8 Pers komfortabel,
   Stellflaeche ~2,2x1,8m + Lauflaeche -> ~6 m^2/Garnitur
-- Zelt entlang der Laengsachse (14m) aufstellen -> Kopfende bleibt
-  fuer Bar/Buffet ueber volle 7m-Breite frei
+- *CONSTRAINT (neu)*: L-Form! Kein Rechteck groesser als 7x7m (B) bzw.
+  4,5x13m (Laengsachse). Zeltbreite max 7m (in B), max 4,5m entlang der
+  Laengsachse. Alte Empfehlungen (5x8, 6x8, 6x10) passen NICHT mehr.
 
-| Gaeste | Garnituren | Empf. Zelt | Zeltflaeche | Restflaeche |
-|--------+------------+------------+-------------+-------------|
-|     30 |          4 | 5x8m       | 40 m^2      | ~58 m^2     |
-|     40 |          5 | 6x8m       | 48 m^2      | ~50 m^2     |
-|     50 |        6-7 | 6x10m      | 60 m^2      | ~38 m^2     |
+- *Beste Loesung*: Zelt in Bereich B (7x7m), Bar/Buffet in Bereich A (4,5x6m).
+  A und B natuerlich getrennt -> schoenes Layout: Gaeste im Zelt, Bar hinten.
 
-- Bei realistisch 35-45 Gaesten -> *6x8m Zelt* ist der Sweet Spot
-  (komfortabel, viel Aussenraum, kleinere Bauteile fuers Treppenhaus)
-- Bei sicher 50+ -> 6x10m, dann Stangenlaenge beim Anbieter pruefen
+| Gaeste | Garnituren | Empf. Zelt | Zeltflaeche | Restfl. B | Bereich           |
+|--------+------------+------------+-------------+-----------+-------------------|
+|     30 |          4 | 5x7m       | 35 m^2      | ~14 m^2   | B; A = Bar/Buffet |
+|     40 |          5 | 6x7m       | 42 m^2      | ~7 m^2    | B; A = Bar/Buffet |
+|     50 |        6-7 | 4x10m      | 40 m^2      | (L-Achse) | eng, kaum Puffer  |
 
-Beispiel-Layout 6x10m Zelt + Bar/Buffet:
+- Bei ~30 Gaesten -> *5x7m Zelt* in B ist der Sweet Spot
+  (4 Garnituren, viel Luft, A bleibt komplett fuer Bar/Buffet frei)
+
+Beispiel-Layout 5x7m Zelt + Bar/Buffet:
 #+begin_example
-+---------------+-----+
-|               |     |
-|     ZELT      | Bar/|
-|     6x10m     | Buf-|
-|               | fet |
-|               | 7x4 |
-+---------------+-----+
-        14m
+   4.5m
+ +--------+
+ |        |
+ |  Bar/  | 6m
+ | Buffet |
+ +--------+------+
+ |               |
+ |  ZELT 5x7m   .|
+ |               | 7m
+ |               |
+ +---------------+
+       7m
 #+end_example
 
 ** Zelt:
@@ -69,6 +97,9 @@ Beispiel-Layout 6x10m Zelt + Bar/Buffet:
    - ;; 5x6
      (+ 200 150 100 75)
      525
+   - *Verfuegbares Zelt: 5x6m = 30 m^2*
+   - Plan: 5 Garnituren mieten, 4 unters Zelt, 1 draussen
+   - Bei Regen: alle 5 unters Zelt -> eng aber geht
 
 
 3. *Luehrs Zeltverleih* (Neustadt am Ruebenberge, ~30 km)
@@ -130,16 +161,26 @@ Beispiel-Layout 6x10m Zelt + Bar/Buffet:
 - Wahre Gaumenfreunde (Hannover): https://wahregaumenfreunde.de/vegetarisch-und-vegan/
 - Hohenstein Catering (Hannover & Berlin): https://hohenstein-catering.de/
 
+*** Kaffee
+
+- TODO: Kaffee - vlt geht das auch ueber den Caterer (mit anfragen)
+
 ** Music?
 
+- Florin hat JBL Bluetooth Box -> whs gut genug
 - https://www.mediamarkt.de/de/content/entertainment/audio/bluetooth-lautsprecher-in-tests
 
 * Buffet
 
-- Vor dem Zelt
-- Brauche Tische, evlt. noch nach Biertischen fragen
--
-  xs
+- Vor dem Zelt (Bereich A, 4,5x6m) - Plan A
+- Bei Regen: Buffet in die Wohnung (umstaendlich aber machbar)
+- Alternativ: Buffet unters Zelt -> dann aber nur 3-4 Garnituren Platz
+
+** Tisch fuer Buffet
+
+- TODO: Tisch organisieren (Katerer bringt keinen mit?)
+- Biertisch-Garnitur-Verleiher fragen ob extra Tische moeglich
+- Klapptisch als Fallback
 
 
 
@@ -147,6 +188,18 @@ Beispiel-Layout 6x10m Zelt + Bar/Buffet:
 
 - mate
 - alkoholfreies Bier
+
+* Kaffee
+
+- Nachmittagskaffee nach dem Buffet, in Thermoskannen auf den Tisch
+- Hafermilch dazu
+- Brühen: Benjis Kaffeemaschine, in Kannen umfüllen / nachbrühen
+- Tassen: Florin bringt welche mit + Benji hat welche -> reicht
+  (nicht jeder trinkt Kaffee)
+- Bedarf Thermoskannen: ~30 Gäste, ca. die Hälfte Kaffeetrinker,
+  2 Tassen p.P. -> ~4-6 L -> *4-6 Thermoskannen* (1-1.5 L)
+- TODO: Thermoskannen organisieren (leihen/zusammensuchen)
+- TODO: Hafermilch besorgen
 
 * Rede
 

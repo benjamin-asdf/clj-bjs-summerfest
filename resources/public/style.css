@@ -215,10 +215,11 @@ body {
   overflow: hidden;
 }
 
-.event-photo {
+.event-photo,
+.event-host {
   display: block;
   width: 100%;
-  max-height: 360px;
+  height: auto;
   object-fit: cover;
   background: var(--bg-elev, #f1f1f1);
 }
@@ -242,9 +243,15 @@ body {
   white-space: pre-line;
 }
 
+.event-invite {
+  margin: 0;
+  padding: 0 1.5rem 1.25rem;
+  line-height: 1.5;
+}
+
 @media (max-width: 600px) {
   .event-details { padding: 0.9rem 1rem; }
-  .event-photo { max-height: 240px; }
+  .event-invite { padding: 0 1rem 0.9rem; }
 }
 
 /* Buttons */
@@ -387,6 +394,44 @@ body {
   font-size: 0.85rem;
 }
 
+.secondary-name-section {
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+}
+
+.secondary-name-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.secondary-name-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.secondary-name-input {
+  flex: 1 1 220px;
+  min-width: 0;
+  padding: 0.65rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 1rem;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.secondary-name-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
 /* Welcome (first-visit name confirmation) */
 
 .welcome-card {
@@ -498,7 +543,16 @@ body {
   border-color: var(--primary);
 }
 
+.info-section textarea.just-saved {
+  border-color: var(--primary);
+  background: rgba(161, 254, 154, 0.08);
+  box-shadow: 0 0 0 3px rgba(161, 254, 154, 0.18);
+  transition: border-color 0.25s, background-color 0.25s, box-shadow 0.25s;
+}
+
 .info-section .btn-save { margin-top: 0.6rem; }
+
+.btn-save[disabled] { opacity: 0.7; cursor: progress; }
 
 /* Contact */
 
@@ -516,6 +570,12 @@ body {
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 0.75rem;
   margin-top: 1rem;
+}
+
+@media (max-width: 600px) {
+  .photo-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .photo-card {
@@ -559,23 +619,13 @@ body {
 
 .lightbox[hidden] { display: none; }
 
-.lightbox:fullscreen,
-.lightbox:-webkit-full-screen { background: #000; }
-
 .lightbox-img {
   max-width: 96vw;
   max-height: 96vh;
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
-  cursor: zoom-in;
   -webkit-touch-callout: none;
-}
-
-.lightbox:fullscreen .lightbox-img,
-.lightbox:-webkit-full-screen .lightbox-img {
-  max-width: 100vw;
-  max-height: 100vh;
 }
 
 .lightbox-close,
@@ -899,15 +949,6 @@ h3 { margin-top: 1.25rem; margin-bottom: 0.4rem; font-size: 1rem; }
   color: var(--text-muted);
   padding: 1.5rem;
   font-style: italic;
-}
-
-.map-placeholder {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1.5rem;
-  text-align: center;
-  margin-top: 0.75rem;
 }
 
 /* ===== Party Games ===== */

@@ -20,6 +20,13 @@
   (str "<!DOCTYPE html>\n"
        (h/html (into [:html] body))))
 
+(defn- save-btn-text-expr
+  "JS expression for reactive save-button label: saved > saving > default."
+  [locale saving-signal saved-signal]
+  (str "$" saved-signal " ? '" (js-string-escape (t locale :ui/saved))
+       "' : ($" saving-signal " ? '" (js-string-escape (t locale :ui/saving))
+       "' : '" (js-string-escape (t locale :profile/save)) "')"))
+
 (defn nav-user-html
   "Clickable navbar greeting that opens the display-name modal."
   [locale user]
@@ -50,7 +57,10 @@
        {"data-on:click" "$showNameEdit = false"}
        (t locale :profile/cancel)]
       [:button.btn.btn-save
-       {"data-on:click" (str "@post('" (u "/api/profile/display-name") "')")}
+       {:data-indicator "savingDisplayName"
+        "data-attr-disabled" "$savingDisplayName"
+        "data-text" (save-btn-text-expr locale "savingDisplayName" "savedDisplayName")
+        "data-on:click" (str "@post('" (u "/api/profile/display-name") "')")}
        (t locale :profile/save)]]]]))
 
 (defn layout
@@ -71,7 +81,14 @@
       (when user
         {:data-signals (str "{showNameEdit:false,newDisplayName:'"
                             (js-string-escape (db/effective-name user))
-                            "'}")})
+                            "',"
+                            "savingDisplayName:false,savedDisplayName:false,"
+                            "savingSecondaryName:false,savedSecondaryName:false,"
+                            "savingInfo:false,savedInfo:false}")
+         "data-effect"
+         (str "$savedDisplayName && setTimeout(() => $savedDisplayName = false, 1500);"
+              "$savedSecondaryName && setTimeout(() => $savedSecondaryName = false, 1500);"
+              "$savedInfo && setTimeout(() => $savedInfo = false, 2000)")})
       [:nav.navbar
        [:a.nav-brand {:href (u "/")} (t locale :nav/brand)]
        [:input#nav-toggle {:type "checkbox"}]
@@ -79,7 +96,6 @@
        [:div.nav-links
         [:a {:href (u "/")} (t locale :nav/home)]
         ;; [:a {:href (u "/contact")} (t locale :nav/contact)]
-        ;; [:a {:href (u "/directions")} (t locale :nav/directions)]
         [:a {:href (u "/gallery")} (t locale :nav/gallery)]
         [:a {:href (u "/chat")} (t locale :nav/chat)]
         ;; [:a {:href (u "/party")} (t locale :nav/party)]
@@ -139,20 +155,24 @@
 
 (defn- rsvp-button
   "Render one RSVP choice button. `value` is the attending text written to the
-   server; `current` is the user's current attending value (for the active
-   highlight). Setting the `attending` signal first lets datastar serialize it
-   into the POST body."
+   server; `current` is the user's current attending value, used only for the
+   pre-hydration class so the initial paint matches. After hydration the
+   active highlight is driven entirely by the `$attending` signal so the click
+   feels instant — the POST still runs (in the background) to persist, mirror
+   to the sheet, and (for yes_plus_one) mint the +1 link."
   [locale current value extra-class i18n-key]
   (let [active? (= current value)
         klass (str "btn " extra-class (when active? " active"))]
     [:button {:class klass
+              "data-class:active" (str "$attending === '" value "'")
               "data-on:click" (str "$attending = '" value "'; @post('" (u "/api/rsvp") "')")}
      (t locale i18n-key)]))
 
 (defn- secondary-link-panel
   "Panel shown to the primary user when they've selected 'wir kommen zu zweit'.
-   Holds the +1's magic-link plus copy/share affordances. The link is rendered
-   server-side; copy/share are JS-only enhancements."
+   Holds the +1's magic-link, copy/share affordances, and a display-name field
+   for the primary to fill in their +1's name. Setting the name is optional —
+   the link works either way."
   [locale {:keys [token-url]}]
   (h/html
    [:div.secondary-panel
@@ -187,7 +207,25 @@
                      "alert(b.dataset.shareText+'\\n'+b.dataset.url)"
                      "}})(this)")}
       (t locale :share/share)]]
-    [:p.secondary-note (t locale :rsvp/plus-one-note)]]))
+    [:p.secondary-note (t locale :rsvp/plus-one-note)]
+    [:div.secondary-name-section
+     [:label.secondary-name-label {:for "secondary-display-name"}
+      (t locale :rsvp/plus-one-name-label)]
+     [:div.secondary-name-row
+      [:input#secondary-display-name.secondary-name-input
+       {:type "text"
+        "data-bind" "secondaryDisplayName"
+        :placeholder (t locale :rsvp/plus-one-name-placeholder)
+        :maxlength "30"
+        "data-on:keydown" (str "evt.key === 'Enter' && @post('"
+                               (u "/api/profile/secondary-display-name") "')")}]
+      [:button.btn.btn-save
+       {:data-indicator "savingSecondaryName"
+        "data-attr-disabled" "$savingSecondaryName"
+        "data-text" (save-btn-text-expr locale "savingSecondaryName" "savedSecondaryName")
+        "data-on:click" (str "@post('"
+                             (u "/api/profile/secondary-display-name") "')")}
+       (t locale :profile/save)]]]]))
 
 (defn rsvp-fragment
   "Renders the RSVP card. `secondary` is {:user :token-url} when the primary has
@@ -223,11 +261,15 @@
        [:label {:for "additional-info"} (t locale :rsvp/info-label)]
        [:textarea#additional-info
         {"data-bind" "additionalInfo"
+         "data-class-just-saved" "$savedInfo"
          :placeholder (t locale :rsvp/info-placeholder)
          :rows "3"}
         (or (:additional-info rsvp) "")]
        [:button.btn.btn-save
-        {"data-on:click" (str "@post('" (u "/api/rsvp/info") "')")}
+        {:data-indicator "savingInfo"
+         "data-attr-disabled" "$savingInfo"
+         "data-text" (save-btn-text-expr locale "savingInfo" "savedInfo")
+         "data-on:click" (str "@post('" (u "/api/rsvp/info") "')")}
         (t locale :rsvp/save)]]])))
 
 (defn- bookmark-hint
@@ -251,11 +293,15 @@ try{if(localStorage.getItem('summerfest:bm'))h.remove()}catch(e){}})();")]])
   "Top panel on the home page: event photo + address + time."
   [locale]
   [:div.card.event-card
-   [:img.event-photo {:src (u "/event-photo.jpg")
-                      :alt (t locale :event/photo-alt)}]
+   [:div.event-hero
+    ;; [:img.event-photo {:src (u "/home-garden.jpg")
+    ;;                    :alt (t locale :event/photo-alt)}]
+    [:img.event-photo {:src (u "/home-host.jpg")
+                       :alt (t locale :event/host-alt)}]]
    [:dl.event-details
     [:dt (t locale :event/when)] [:dd (t locale :event/time)]
-    [:dt (t locale :event/where)] [:dd (t locale :event/address)]]])
+    [:dt (t locale :event/where)] [:dd (t locale :event/address)]]
+   [:p.event-invite (t locale :event/invite)]])
 
 (defn welcome-page
   "First-visit prompt: ask the user to confirm or replace the auto-generated
@@ -281,7 +327,8 @@ try{if(localStorage.getItem('summerfest:bm'))h.remove()}catch(e){}})();")]])
             [:p.welcome-hint.small (t locale :welcome/hint)]]]))
 
 (defn home-page [ctx rsvp secondary]
-  (let [{:keys [user locale]} ctx]
+  (let [{:keys [user locale]} ctx
+        sec-name (or (:display-name (:user secondary)) "")]
     (layout (t locale :nav/home) ctx
             (bookmark-hint locale)
             (event-card locale)
@@ -292,6 +339,8 @@ try{if(localStorage.getItem('summerfest:bm'))h.remove()}catch(e){}})();")]])
                                         "null")
                                       ", additionalInfo: '"
                                       (js-string-escape (or (:additional-info rsvp) ""))
+                                      "', secondaryDisplayName: '"
+                                      (js-string-escape sec-name)
                                       "'}")}
              (rsvp-fragment locale user rsvp secondary)])))
 
@@ -304,10 +353,10 @@ try{if(localStorage.getItem('summerfest:bm'))h.remove()}catch(e){}})();")]])
              [:h1 (t locale :impressum/title)]
              [:h3 (t locale :impressum/responsible)]
              [:p (t locale :impressum/name) [:br]
-              (t locale :impressum/address)]
+              (interpose [:br] (str/split-lines (t locale :impressum/address)))]
              [:h3 (t locale :impressum/contact)]
              [:p (t locale :contact/email) ": "
-              [:a {:href "mailto:fest@example.com"} "fest@example.com"]]
+              [:a {:href "mailto:Benjamin.Schwerdtner@gmail.com"} "Benjamin.Schwerdtner@gmail.com"]]
              [:p.small (t locale :impressum/disclaimer)]])))
 
 ;; --- Contact ---
@@ -322,24 +371,6 @@ try{if(localStorage.getItem('summerfest:bm'))h.remove()}catch(e){}})();")]])
               [:p (t locale :contact/email) ": " [:a {:href "mailto:fest@example.com"} "fest@example.com"]]
               [:p (t locale :contact/phone) ": " [:a {:href "tel:+491234567890"} "+49 123 456 7890"]]
               [:p (t locale :contact/or-chat) [:a {:href (u "/chat")} (t locale :contact/chat-link)] "!"]]])))
-
-;; --- Directions ---
-
-(defn directions-page [ctx]
-  (let [locale (:locale ctx)]
-    (layout (t locale :directions/title) ctx
-            [:div.card
-             [:h1 (t locale :directions/title)]
-             [:h3 (t locale :directions/address)]
-             [:p "Summer Fest Venue" [:br] "123 Garden Lane" [:br] "12345 Sunville"]
-             [:h3 (t locale :directions/by-car)]
-             [:p (t locale :directions/by-car-text)]
-             [:h3 (t locale :directions/by-transit)]
-             [:p (t locale :directions/by-transit-text)]
-             [:h3 (t locale :directions/map)]
-             [:div.map-placeholder
-              [:p (t locale :directions/map-placeholder)]
-              [:p.small "Coordinates: 52.520, 13.405"]]])))
 
 ;; --- Gallery ---
 
@@ -394,7 +425,6 @@ try{if(localStorage.getItem('summerfest:bm'))h.remove()}catch(e){}})();")]])
   function close(){
     if(box.hidden)return;
     box.hidden=true;img.removeAttribute('src');document.body.style.overflow='';
-    if(document.fullscreenElement){try{document.exitFullscreen()}catch(e){}}
     if(!fromPop&&history.state&&history.state.__lightbox){history.back()}
     fromPop=false;
   }
@@ -407,13 +437,6 @@ try{if(localStorage.getItem('summerfest:bm'))h.remove()}catch(e){}})();")]])
   box.querySelector('.lightbox-prev').addEventListener('click',function(e){e.stopPropagation();show(idx-1)});
   box.querySelector('.lightbox-next').addEventListener('click',function(e){e.stopPropagation();show(idx+1)});
   box.addEventListener('click',function(e){if(e.target===box)close()});
-  img.addEventListener('click',function(e){
-    e.stopPropagation();
-    var fn=box.requestFullscreen||box.webkitRequestFullscreen;
-    var p=fn&&fn.call(box);
-    if(!p)window.open(img.src,'_blank','noopener');
-    else if(p.catch)p.catch(function(){window.open(img.src,'_blank','noopener')})
-  });
   document.addEventListener('keydown',function(e){
     if(box.hidden)return;
     if(e.key==='Escape')close();

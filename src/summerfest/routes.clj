@@ -285,7 +285,8 @@
     (let [updated-rsvp (db/get-rsvp (:id user))
           secondary (secondary-info req user)]
       (sse/sse-response
-       (sse/patch-elements (views/rsvp-fragment locale user updated-rsvp secondary))))))
+       (sse/patch-elements (views/rsvp-fragment locale user updated-rsvp secondary))
+       (sse/patch-signals {:savedInfo true})))))
 
 (defn- valid-upload? [file]
   (and (map? file)
@@ -363,7 +364,39 @@
       (sse/sse-response
        (sse/patch-elements (views/nav-user-html locale updated))
        (sse/patch-signals {:showNameEdit false
-                           :newDisplayName (db/effective-name updated)})))))
+                           :newDisplayName (db/effective-name updated)
+                           :savedDisplayName true})))))
+
+(defn secondary-display-name-handler
+  "Primary edits their +1's display name from the RSVP panel. Updates the
+   secondary's display_name in the DB, mirrors to column A of the secondary's
+   row in Invites, broadcasts to chat (author labels), and re-renders the
+   RSVP card so the panel's signal stays in sync. No-op for non-primaries
+   and for primaries with no secondary minted yet."
+  [req]
+  (let [user (:user req)
+        locale (get-locale req)
+        body (or (parse-json-body req) {})
+        raw (or (:secondaryDisplayName body) "")
+        new-name (let [t (clojure.string/trim raw)]
+                   (when (seq t) (subs t 0 (min 30 (count t)))))]
+    (when (db/primary? user)
+      (when-let [sec (db/get-secondary-user-of (:id user))]
+        (db/update-display-name! (:id sec) new-name)
+        (let [updated (db/get-user-by-id (:id sec))]
+          (future
+            (try (invites/write-back-secondary-name! updated)
+                 (catch Exception e
+                   (println "Invites secondary-name write-back failed:"
+                            (.getMessage e))))))
+        (broadcast-display-name!)))
+    (let [updated-rsvp (db/get-rsvp (:id user))
+          secondary (secondary-info req user)
+          sec-name (or (:display-name (:user secondary)) "")]
+      (sse/sse-response
+       (sse/patch-elements (views/rsvp-fragment locale user updated-rsvp secondary))
+       (sse/patch-signals {:secondaryDisplayName sec-name
+                           :savedSecondaryName true})))))
 
 (defn welcome-confirm-handler
   "First-visit display-name confirmation. Plain form POST so we get a clean
@@ -466,6 +499,7 @@
      ["/api/chat/pin" {:post chat-pin-handler :middleware [require-auth]}]
      ["/api/chat/older" {:get chat-older-handler :middleware [require-auth]}]
      ["/api/profile/display-name" {:post display-name-handler :middleware [require-auth]}]
+     ["/api/profile/secondary-display-name" {:post secondary-display-name-handler :middleware [require-auth]}]
      ["/api/profile/welcome" {:post welcome-confirm-handler :middleware [require-auth]}]
      ["/uploads/:filename" {:get serve-upload}]
      ["/thumbs/:filename" {:get serve-thumb}]])
