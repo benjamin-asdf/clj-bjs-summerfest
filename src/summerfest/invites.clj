@@ -9,6 +9,7 @@
      B: Language  ('de' or 'en')
      C: RSVP      (yes/no/maybe/blank — managed elsewhere)
      D: Token     (raw UUID, written by us)
+     E: Info      (free-form note submitted with the RSVP)
 
    Re-runnable: if the primary's Token cell is empty we mint a fresh pair. If a
    secondary row's name is filled in later, the DB display name is updated to
@@ -20,7 +21,7 @@
 (def ^:private invites-tab "Invites")
 (def ^:private gaeste-tab "Gaeste")
 
-(def ^:private headers ["Name" "Language" "RSVP" "Token"])
+(def ^:private headers ["Name" "Language" "RSVP" "Token" "Info"])
 
 ;; Gaeste tab is the master guest list. We only read column A (Gast): every
 ;; guest gets a primary + blank-secondary pair in Invites regardless of the
@@ -34,7 +35,8 @@
   {:name  (cell row 0)
    :lang  (cell row 1)
    :rsvp  (cell row 2)
-   :token (cell row 3)})
+   :token (cell row 3)
+   :info  (cell row 4)})
 
 (defn- effective-lang
   "Use the row's language if set, else fall back (typically the primary's lang
@@ -42,18 +44,27 @@
   [lang fallback]
   (or (not-empty lang) (not-empty fallback) "de"))
 
-(defn- write-row! [row-number {:keys [name lang rsvp token]}]
-  (sheets/update-row! invites-tab row-number [name lang rsvp token]))
+(defn- write-row! [row-number {:keys [name lang rsvp token info]}]
+  (sheets/update-row! invites-tab row-number
+                      [name lang rsvp token (or info "")]))
+
+(defn- normalize-row
+  "Pad/truncate a row to exactly 5 cells so a batch PUT covers A:E cleanly."
+  [row]
+  (mapv #(or % "") (take 5 (concat row (repeat "")))))
 
 (defn sync-from-sheet!
   "Walk the Invites tab in (primary, secondary) pairs.
 
    For each pair where the primary's Token cell is empty: mint a primary user,
-   mint a +1 secondary user, write both tokens back. If the secondary row
+   mint a +1 secondary user, stage both tokens for write. If the secondary row
    already has a name, that name is stored as the secondary's display name.
 
    For pairs already minted: if the secondary row's name has been filled in or
    changed in the sheet, the DB display name is synced to match.
+
+   All sheet edits are flushed in a single PUT at the end — minting per-row
+   would blow past Sheets' 60-write-per-minute quota on a full guest list.
 
    Returns {:minted N :name-updates N :skipped N}."
   []
@@ -61,12 +72,14 @@
   (let [rows (vec (or (sheets/fetch-tab invites-tab) []))
         data (vec (drop 1 rows))
         pairs (partition-all 2 data)
+        new-data (atom (mapv normalize-row data))
+        set-row! (fn [idx vals] (swap! new-data assoc idx (normalize-row vals)))
         stats (atom {:minted 0 :name-updates 0 :skipped 0})]
     (doseq [[i pair] (map-indexed vector pairs)]
       (let [p (row-fields (first pair))
             s (row-fields (second pair))
-            p-row (+ 2 (* 2 i))
-            s-row (inc p-row)
+            p-idx (* 2 i)
+            s-idx (inc p-idx)
             p-lang (effective-lang (:lang p) nil)
             s-lang (effective-lang (:lang s) p-lang)]
         (cond
@@ -75,10 +88,8 @@
                 secondary (db/create-secondary-user! (:id primary))]
             (when (seq (:name s))
               (db/update-display-name! (:id secondary) (:name s)))
-            (write-row! p-row {:name (:name p) :lang p-lang :rsvp (:rsvp p)
-                               :token (str (:token primary))})
-            (write-row! s-row {:name (:name s) :lang s-lang :rsvp (:rsvp s)
-                               :token (str (:token secondary))})
+            (set-row! p-idx [(:name p) p-lang (:rsvp p) (str (:token primary)) (:info p)])
+            (set-row! s-idx [(:name s) s-lang (:rsvp s) (str (:token secondary)) (:info s)])
             (swap! stats update :minted inc))
 
           (and (seq (:token s)) (seq (:name s)))
@@ -90,6 +101,8 @@
 
           :else
           (swap! stats update :skipped inc))))
+    (when (seq @new-data)
+      (sheets/update-range! (str invites-tab "!A2:E" (+ 1 (count @new-data))) @new-data))
     @stats))
 
 (defn- gaeste->invites-rows
@@ -129,20 +142,22 @@
                            same? (= (:name new-p) (cell old-p 0))
                            p-tok (if same? (cell old-p 3) "")
                            s-tok (if same? (cell old-s 3) "")
+                           p-info (if same? (cell old-p 4) "")
+                           s-info (if same? (cell old-s 4) "")
                            s-name (if same? (cell old-s 0) (:name new-s))]
                        (when (seq p-tok) (swap! kept inc))
                        (when (seq s-tok) (swap! kept inc))
-                       [[(:name new-p) "de" "" p-tok]
-                        [s-name        "de" "" s-tok]]))
+                       [[(:name new-p) "de" "" p-tok p-info]
+                        [s-name        "de" "" s-tok s-info]]))
         out (vec (mapcat merge-pair (range) new-pairs))
         ;; pad with empty rows so any trailing leftovers from the old layout
         ;; get cleared in a single PUT
         existing-count (count (mapcat identity existing-pairs))
         pad (max 0 (- existing-count (count out)))
-        padded (into out (repeat pad ["" "" "" ""]))
+        padded (into out (repeat pad ["" "" "" "" ""]))
         end-row (+ 1 (count padded))]
     (when (seq padded)
-      (sheets/update-range! (str invites-tab "!A2:D" end-row) padded))
+      (sheets/update-range! (str invites-tab "!A2:E" end-row) padded))
     {:wrote (count out) :tokens-kept @kept}))
 
 (defn create-and-invite!
@@ -156,8 +171,8 @@
         secondary (db/create-secondary-user! (:id primary))]
     (sheets/ensure-headers! invites-tab headers)
     (sheets/append-rows! invites-tab
-                         [[name "de" "" (str (:token primary))]
-                          [""   "de" "" (str (:token secondary))]])
+                         [[name "de" "" (str (:token primary)) ""]
+                          [""   "de" "" (str (:token secondary)) ""]])
     {:primary primary :secondary secondary}))
 
 (defn- row-of-user
@@ -172,13 +187,16 @@
       (when idx (inc idx)))))
 
 (defn sync-rsvp-cell!
-  "Mirror a user's RSVP into the Invites tab. Updates column C (RSVP) of the
-   row whose column D matches the user's token. No-op when sheets isn't
-   configured or when the user isn't in the sheet."
-  [user attending]
+  "Mirror a user's RSVP into the Invites tab. Updates column C (RSVP) and
+   column E (Info) of the row whose column D matches the user's token; column
+   D (Token) is left untouched. No-op when sheets isn't configured or when
+   the user isn't in the sheet."
+  [user attending info]
   (when-let [sheet-row (row-of-user user)]
     (sheets/update-range! (str invites-tab "!C" sheet-row)
-                          [[(or attending "")]])))
+                          [[(or attending "")]])
+    (sheets/update-range! (str invites-tab "!E" sheet-row)
+                          [[(or info "")]])))
 
 (defn write-back-secondary!
   "Fill the secondary slot in Invites after the web-side +1 flow mints a

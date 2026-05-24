@@ -250,10 +250,10 @@
 
 (defn- sync-rsvp-async!
   "Best-effort fire-and-forget mirror of the user's RSVP into the Invites tab
-   (column C of their row, matched by token)."
-  [user attending]
+   (column C + column E of their row, matched by token)."
+  [user attending info]
   (future
-    (try (invites/sync-rsvp-cell! user attending)
+    (try (invites/sync-rsvp-cell! user attending info)
          (catch Exception e
            (println "Invites RSVP sync failed:" (.getMessage e))))))
 
@@ -267,7 +267,7 @@
     (when (valid-attending-for user attending)
       (when (= "yes_plus_one" attending) (ensure-secondary! user))
       (db/upsert-rsvp! (:id user) attending info)
-      (sync-rsvp-async! user attending))
+      (sync-rsvp-async! user attending info))
     (let [updated-rsvp (db/get-rsvp (:id user))
           secondary (secondary-info req user)]
       (sse/sse-response
@@ -281,7 +281,7 @@
         rsvp (db/get-rsvp (:id user))
         attending (or (:attending rsvp) "yes")]
     (db/upsert-rsvp! (:id user) attending info)
-    (sync-rsvp-async! user attending)
+    (sync-rsvp-async! user attending info)
     (let [updated-rsvp (db/get-rsvp (:id user))
           secondary (secondary-info req user)]
       (sse/sse-response
