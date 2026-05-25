@@ -1,19 +1,24 @@
 (ns summerfest.invites
   "Read the 'Invites' tab and mint magic-link tokens for primary+secondary user
    pairs. Rows live in pairs: each primary row is immediately followed by a
-   secondary row whose name is often blank — the admin fills it once the
-   primary confirms 'wir kommen zu zweit'.
+   secondary row whose name is often blank — the admin fills the Display Name
+   column once the primary confirms 'wir kommen zu zweit'.
 
-   Sheet layout (tab 'Invites'):
-     A: Name      (primary written by admin; secondary often blank)
-     B: Language  ('de' or 'en')
-     C: RSVP      (yes/no/maybe/blank — managed elsewhere)
-     D: Token     (raw UUID, written by us)
-     E: Info      (free-form note submitted with the RSVP)
+   Sheet layout (tab 'Invites'), columns managed by the code:
+     A: Name         (primary written by admin from Gaeste; secondary usually blank)
+     B: Language     ('de' or 'en')
+     C: RSVP         (yes/no/maybe/blank — written by the web on submit)
+     D: Token        (raw UUID, written by us)
+     E: Info         (free-form note submitted with the RSVP)
+     F: Display Name (admin-supplied override / +1 name; synced into the DB
+                     until the user picks their own name via the welcome page)
 
-   Re-runnable: if the primary's Token cell is empty we mint a fresh pair. If a
-   secondary row's name is filled in later, the DB display name is updated to
-   match on the next run."
+   Columns past F are not touched by the code — the admin can add their own
+   columns (Notes, Phone, etc.) and they survive all sync operations.
+
+   Re-runnable: if the primary's Token cell is empty we mint a fresh pair. On
+   subsequent runs, Display Name is pushed into the DB for any user who hasn't
+   confirmed their own name yet."
   (:require [clojure.string :as str]
             [summerfest.db :as db]
             [summerfest.sheets :as sheets]))
@@ -21,7 +26,9 @@
 (def ^:private invites-tab "Invites")
 (def ^:private gaeste-tab "Gaeste")
 
-(def ^:private headers ["Name" "Language" "RSVP" "Token" "Info"])
+(def ^:private headers ["Name" "Language" "RSVP" "Token" "Info" "Display Name"])
+(def ^:private managed-cols (count headers))
+(def ^:private last-col (str (char (+ (dec (int \A)) managed-cols))))
 
 ;; Gaeste tab is the master guest list. We only read column A (Gast): every
 ;; guest gets a primary + blank-secondary pair in Invites regardless of the
@@ -32,11 +39,12 @@
   (-> (get row idx) (or "") str str/trim))
 
 (defn- row-fields [row]
-  {:name  (cell row 0)
-   :lang  (cell row 1)
-   :rsvp  (cell row 2)
-   :token (cell row 3)
-   :info  (cell row 4)})
+  {:name         (cell row 0)
+   :lang         (cell row 1)
+   :rsvp         (cell row 2)
+   :token        (cell row 3)
+   :info         (cell row 4)
+   :display-name (cell row 5)})
 
 (defn- effective-lang
   "Use the row's language if set, else fall back (typically the primary's lang
@@ -44,27 +52,33 @@
   [lang fallback]
   (or (not-empty lang) (not-empty fallback) "de"))
 
-(defn- write-row! [row-number {:keys [name lang rsvp token info]}]
+(defn- write-row! [row-number {:keys [name lang rsvp token info display-name]}]
   (sheets/update-row! invites-tab row-number
-                      [name lang rsvp token (or info "")]))
+                      [name lang rsvp token (or info "") (or display-name "")]))
 
 (defn- normalize-row
-  "Pad/truncate a row to exactly 5 cells so a batch PUT covers A:E cleanly."
+  "Pad/truncate a row to exactly `managed-cols` cells so the batch PUT covers
+   A..F cleanly. Columns past F are not represented in memory; they're left
+   alone on the sheet because the PUT range stops at F."
   [row]
-  (mapv #(or % "") (take 5 (concat row (repeat "")))))
+  (mapv #(or % "") (take managed-cols (concat row (repeat "")))))
 
 (defn sync-from-sheet!
   "Walk the Invites tab in (primary, secondary) pairs.
 
    For each pair where the primary's Token cell is empty: mint a primary user,
-   mint a +1 secondary user, stage both tokens for write. If the secondary row
-   already has a name, that name is stored as the secondary's display name.
+   mint a +1 secondary user, stage both tokens for write. If the Display Name
+   column is set on either row, that name is applied to the freshly-minted
+   user (column A on the secondary row is honored as a legacy fallback when
+   Display Name is empty).
 
-   For pairs already minted: if the secondary row's name has been filled in or
-   changed in the sheet, the DB display name is synced to match.
+   For pairs already minted: the Display Name column is pushed into the DB
+   for any user who hasn't confirmed their own name yet (via the welcome page
+   or nav edit). Once a user confirms, the sheet stops winning.
 
    All sheet edits are flushed in a single PUT at the end — minting per-row
    would blow past Sheets' 60-write-per-minute quota on a full guest list.
+   The PUT range is A:F, so admin-managed columns past F are left alone.
 
    Returns {:minted N :name-updates N :skipped N}."
   []
@@ -74,35 +88,48 @@
         pairs (partition-all 2 data)
         new-data (atom (mapv normalize-row data))
         set-row! (fn [idx vals] (swap! new-data assoc idx (normalize-row vals)))
-        stats (atom {:minted 0 :name-updates 0 :skipped 0})]
+        stats (atom {:minted 0 :name-updates 0 :skipped 0})
+        sync-display!
+        (fn [token sheet-name]
+          (when (and (seq token) (seq sheet-name))
+            (when-let [user (db/get-user-by-token token)]
+              (when (and (not (:name-confirmed user))
+                         (not= (:display-name user) sheet-name))
+                (db/set-display-name-from-sheet! (:id user) sheet-name)
+                (swap! stats update :name-updates inc)))))]
     (doseq [[i pair] (map-indexed vector pairs)]
       (let [p (row-fields (first pair))
             s (row-fields (second pair))
             p-idx (* 2 i)
             s-idx (inc p-idx)
             p-lang (effective-lang (:lang p) nil)
-            s-lang (effective-lang (:lang s) p-lang)]
+            s-lang (effective-lang (:lang s) p-lang)
+            ;; Display Name column preferred; column A on the secondary row is
+            ;; honored as a legacy fallback (older sheets put the +1's name
+            ;; there before the Display Name column existed).
+            s-display (or (not-empty (:display-name s)) (not-empty (:name s)))]
         (cond
           (and (seq (:name p)) (empty? (:token p)))
           (let [primary   (db/create-user! :name (:name p))
                 secondary (db/create-secondary-user! (:id primary))]
-            (when (seq (:name s))
-              (db/update-display-name! (:id secondary) (:name s)))
-            (set-row! p-idx [(:name p) p-lang (:rsvp p) (str (:token primary)) (:info p)])
-            (set-row! s-idx [(:name s) s-lang (:rsvp s) (str (:token secondary)) (:info s)])
+            (when (seq (:display-name p))
+              (db/set-display-name-from-sheet! (:id primary) (:display-name p)))
+            (when (seq s-display)
+              (db/set-display-name-from-sheet! (:id secondary) s-display))
+            (set-row! p-idx [(:name p) p-lang (:rsvp p) (str (:token primary)) (:info p) (:display-name p)])
+            (set-row! s-idx [(:name s) s-lang (:rsvp s) (str (:token secondary)) (:info s) (:display-name s)])
             (swap! stats update :minted inc))
 
-          (and (seq (:token s)) (seq (:name s)))
-          (let [user (db/get-user-by-token (:token s))]
-            (if (and user (not= (db/effective-name user) (:name s)))
-              (do (db/update-display-name! (:id user) (:name s))
-                  (swap! stats update :name-updates inc))
-              (swap! stats update :skipped inc)))
+          (or (seq (:token p)) (seq (:token s)))
+          (do
+            (sync-display! (:token p) (:display-name p))
+            (sync-display! (:token s) s-display)
+            (swap! stats update :skipped inc))
 
           :else
           (swap! stats update :skipped inc))))
     (when (seq @new-data)
-      (sheets/update-range! (str invites-tab "!A2:E" (+ 1 (count @new-data))) @new-data))
+      (sheets/update-range! (str invites-tab "!A2:" last-col (+ 1 (count @new-data))) @new-data))
     @stats))
 
 (defn- gaeste->invites-rows
@@ -121,11 +148,14 @@
 
    Preservation is pair-aware: the (primary, secondary) pair at position N in
    the new layout is matched against the old pair at the same position by the
-   primary's name. When matched, both rows' tokens are carried over, and the
-   secondary's display name is kept (the +1 flow may have written one in).
-   RSVP cells are always blanked — the live site owns RSVP state and writes
-   it back via `sheets/sync-rsvp!`. When the primary's name shifts, the whole
-   pair resets.
+   primary's name. When matched, both rows' tokens, info, and Display Name are
+   carried over, plus column A on the secondary (the +1 flow may have written
+   one in pre-Display-Name). RSVP cells are always blanked — the live site
+   owns RSVP state. When the primary's name shifts, the whole pair resets.
+
+   The PUT only spans A:F, so admin-managed columns past F are left in place.
+   (They will, however, no longer line up with their original guest if the
+   layout shifts — the admin should re-check those columns after a regen.)
 
    Returns {:wrote N :tokens-kept K}."
   []
@@ -144,20 +174,23 @@
                            s-tok (if same? (cell old-s 3) "")
                            p-info (if same? (cell old-p 4) "")
                            s-info (if same? (cell old-s 4) "")
+                           p-disp (if same? (cell old-p 5) "")
+                           s-disp (if same? (cell old-s 5) "")
                            s-name (if same? (cell old-s 0) (:name new-s))]
                        (when (seq p-tok) (swap! kept inc))
                        (when (seq s-tok) (swap! kept inc))
-                       [[(:name new-p) "de" "" p-tok p-info]
-                        [s-name        "de" "" s-tok s-info]]))
+                       [[(:name new-p) "de" "" p-tok p-info p-disp]
+                        [s-name        "de" "" s-tok s-info s-disp]]))
         out (vec (mapcat merge-pair (range) new-pairs))
         ;; pad with empty rows so any trailing leftovers from the old layout
         ;; get cleared in a single PUT
         existing-count (count (mapcat identity existing-pairs))
         pad (max 0 (- existing-count (count out)))
-        padded (into out (repeat pad ["" "" "" "" ""]))
+        empty-row (vec (repeat managed-cols ""))
+        padded (into out (repeat pad empty-row))
         end-row (+ 1 (count padded))]
     (when (seq padded)
-      (sheets/update-range! (str invites-tab "!A2:E" end-row) padded))
+      (sheets/update-range! (str invites-tab "!A2:" last-col end-row) padded))
     {:wrote (count out) :tokens-kept @kept}))
 
 (defn create-and-invite!
@@ -171,8 +204,8 @@
         secondary (db/create-secondary-user! (:id primary))]
     (sheets/ensure-headers! invites-tab headers)
     (sheets/append-rows! invites-tab
-                         [[name "de" "" (str (:token primary)) ""]
-                          [""   "de" "" (str (:token secondary)) ""]])
+                         [[name "de" "" (str (:token primary)) "" ""]
+                          [""   "de" "" (str (:token secondary)) "" ""]])
     {:primary primary :secondary secondary}))
 
 (defn- row-of-user
@@ -201,22 +234,63 @@
 (defn write-back-secondary!
   "Fill the secondary slot in Invites after the web-side +1 flow mints a
    secondary user. Looks up the primary's row by its token in column D and
-   writes the new secondary's display name + token into the row directly
-   below. No-op when sheets isn't configured or when the primary isn't found
-   in the sheet (e.g. user minted via REPL, outside the invites pairing)."
+   writes the new secondary's token + Display Name into the row directly
+   below (column A stays blank — secondaries don't come from Gaeste, so the
+   admin's view of the +1's name lives in column F). No-op when sheets isn't
+   configured or when the primary isn't found in the sheet (e.g. user minted
+   via REPL, outside the invites pairing)."
   [primary secondary]
   (when-let [p-row (row-of-user primary)]
     (let [display (or (:display-name secondary) (:name secondary))]
       (write-row! (inc p-row)
-                  {:name display :lang "de" :rsvp ""
-                   :token (str (:token secondary))}))))
+                  {:name ""
+                   :lang "de"
+                   :rsvp ""
+                   :token (str (:token secondary))
+                   :info ""
+                   :display-name display}))))
 
 (defn write-back-secondary-name!
-  "Update only column A (Name) on the secondary user's row in Invites. Used
-   when the primary edits their +1's display name from the RSVP panel. Empty
-   string clears the cell. No-op when sheets isn't configured or the secondary
-   isn't in the sheet."
+  "Update only column F (Display Name) on the secondary user's row in Invites.
+   Used when the primary edits their +1's display name from the RSVP panel.
+   Empty string clears the cell. No-op when sheets isn't configured or the
+   secondary isn't in the sheet."
   [secondary]
   (when-let [row (row-of-user secondary)]
-    (sheets/update-range! (str invites-tab "!A" row)
+    (sheets/update-range! (str invites-tab "!" last-col row)
                           [[(or (:display-name secondary) "")]])))
+
+(def ^:private default-public-base-url
+  (or (System/getenv "PUBLIC_BASE_URL")
+      "https://benjamin-schwerdtner.de/summerfest"))
+
+(defn export-invites-tsv!
+  "Read the current Invites tab and write a TSV at `tsv-path` with one row per
+   (primary, secondary) pair that has both tokens minted. Columns:
+     Name<TAB>Primary Link<TAB>+1 Link
+   `base-url` is prefixed onto each `/login?token=…` URL. Returns the number
+   of pairs written. No-op (and returns nil) when sheets isn't configured."
+  ([] (export-invites-tsv! "invites.tsv" default-public-base-url))
+  ([tsv-path] (export-invites-tsv! tsv-path default-public-base-url))
+  ([tsv-path base-url]
+   (when-let [rows (sheets/fetch-tab invites-tab)]
+     (let [pairs (partition-all 2 (drop 1 rows))
+           link (fn [tok] (str base-url "/login?token=" tok))
+           lines (for [[p s] pairs
+                       :let [p-tok (cell p 3)
+                             s-tok (cell s 3)]
+                       :when (and (seq p-tok) (seq s-tok))]
+                   (str (cell p 0) "\t" (link p-tok) "\t" (link s-tok)))
+           out (str "Name\tPrimary Link\t+1 Link\n"
+                    (str/join "\n" lines))]
+       (spit tsv-path out)
+       (count lines)))))
+
+(defn mint-and-export!
+  "Convenience entry point: mint any unminted pairs from the Invites sheet
+   (writing tokens back to column D), then dump the current state to
+   `invites.tsv` in the working dir. Returns {:sync … :exported N}."
+  []
+  (let [sync-stats (sync-from-sheet!)
+        exported (export-invites-tsv!)]
+    {:sync sync-stats :exported exported}))

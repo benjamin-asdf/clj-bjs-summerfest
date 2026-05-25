@@ -369,10 +369,12 @@
 
 (defn secondary-display-name-handler
   "Primary edits their +1's display name from the RSVP panel. Updates the
-   secondary's display_name in the DB, mirrors to column A of the secondary's
-   row in Invites, broadcasts to chat (author labels), and re-renders the
-   RSVP card so the panel's signal stays in sync. No-op for non-primaries
-   and for primaries with no secondary minted yet."
+   secondary's display_name in the DB (which also flips `name_confirmed` on
+   the secondary, so subsequent sheet Display Name syncs no longer override),
+   mirrors to column F of the secondary's row in Invites, broadcasts to chat
+   (author labels), and re-renders the RSVP card so the panel's signal stays
+   in sync. No-op for non-primaries and for primaries with no secondary
+   minted yet."
   [req]
   (let [user (:user req)
         locale (get-locale req)

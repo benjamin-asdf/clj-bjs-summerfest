@@ -84,6 +84,20 @@
     (q1 "UPDATE users SET display_name = ?, name_confirmed = true WHERE id = ? RETURNING *"
         value user-id)))
 
+(defn set-display-name-from-sheet!
+  "Apply an admin-supplied display name (from the Invites sheet's Display Name
+   column) to the user. No-op when the user has already confirmed their name
+   via the welcome page or nav edit. Does not flip `name_confirmed`, so the
+   sheet can keep winning on subsequent syncs until the user picks a name
+   themselves. Returns the updated row, or nil when the WHERE clause skipped."
+  [user-id display-name]
+  (let [trimmed (some-> display-name clojure.string/trim)
+        value (when (seq trimmed) trimmed)]
+    (q1 "UPDATE users SET display_name = ?
+         WHERE id = ? AND name_confirmed = false
+         RETURNING *"
+        value user-id)))
+
 (defn effective-name
   "Display name if set, else the original name."
   [user]

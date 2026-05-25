@@ -115,12 +115,16 @@
       true)))
 
 (defn ensure-headers!
-  "Write `headers` into row 1 of `tab-name` if it isn't already an exact match.
-   Creates the tab if missing."
+  "Write `headers` into columns A..N of row 1 in `tab-name` if those cells
+   aren't already an exact match (N = (count headers)). Columns past N are
+   left untouched so the admin can add their own columns alongside the ones
+   the code manages. Creates the tab if missing."
   [tab-name headers]
   (ensure-tab! tab-name)
-  (let [existing (fetch-tab tab-name)
-        first-row (some-> existing first vec)]
-    (when (not= first-row (mapv str headers))
+  (let [n (count headers)
+        existing (fetch-tab tab-name)
+        first-row (or (some-> existing first vec) [])
+        managed (vec (take n (concat first-row (repeat ""))))]
+    (when (not= managed (mapv str headers))
       (update-range! (str tab-name "!A1") [headers]))))
 
