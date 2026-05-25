@@ -263,6 +263,7 @@
         {"data-bind" "additionalInfo"
          "data-class-just-saved" "$savedInfo"
          :placeholder (t locale :rsvp/info-placeholder)
+         :maxlength "500"
          :rows "3"}
         (or (:additional-info rsvp) "")]
        [:button.btn.btn-save
@@ -402,7 +403,7 @@ try{if(localStorage.getItem('summerfest:bm'))h.remove()}catch(e){}})();")]])
                 [:label.btn.btn-save.upload-trigger {:for "photo-file"}
                  (t locale :gallery/upload)]
                 [:input#photo-file
-                 {:type "file" :name "photo" :accept "image/*" :required true
+                 {:type "file" :name "photo" :accept "image/*"
                   :hidden true
                   :onchange "this.form.submit()"}]])]
             (photo-grid locale photos)

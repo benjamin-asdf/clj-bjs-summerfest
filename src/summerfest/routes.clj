@@ -277,7 +277,8 @@
   (let [user (:user req)
         locale (get-locale req)
         body (or (parse-json-body req) {})
-        info (or (:additionalInfo body) "")
+        raw-info (or (:additionalInfo body) "")
+        info (subs raw-info 0 (min 500 (count raw-info)))
         rsvp (db/get-rsvp (:id user))
         attending (or (:attending rsvp) "yes")]
     (db/upsert-rsvp! (:id user) attending info)
