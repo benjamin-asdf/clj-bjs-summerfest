@@ -81,6 +81,12 @@
   (or (get-in req [:session :locale])
       i18n/default-locale))
 
+(defn- parse-locale-param
+  "Returns :de/:en if the query param maps to a known locale, else nil."
+  [req]
+  (when-let [v (get-in req [:query-params "lang"])]
+    (#{:de :en} (keyword v))))
+
 (defn- current-user [req]
   (when-let [uid (get-in req [:session :user-id])]
     (db/get-user-by-id uid)))
@@ -169,12 +175,18 @@
 ;; --- Page Handlers ---
 
 (defn login-handler [req]
-  (if-let [token (get-in req [:query-params "token"])]
-    (if-let [user (db/get-user-by-token token)]
-      (-> (resp/redirect (u "/"))
-          (assoc :session (merge (:session req) {:user-id (:id user)})))
-      (html-response (views/invalid-token-page (get-locale req))))
-    (html-response (views/login-page (get-locale req)))))
+  (let [lang (parse-locale-param req)
+        base-session (cond-> (or (:session req) {})
+                       lang (assoc :locale lang))
+        page-locale (or lang (get-locale req))]
+    (if-let [token (get-in req [:query-params "token"])]
+      (if-let [user (db/get-user-by-token token)]
+        (-> (resp/redirect (u "/"))
+            (assoc :session (assoc base-session :user-id (:id user))))
+        (-> (html-response (views/invalid-token-page page-locale))
+            (assoc :session base-session)))
+      (-> (html-response (views/login-page page-locale))
+          (assoc :session base-session)))))
 
 (defn set-locale-handler [req]
   (let [locale (keyword (get-in req [:query-params "locale"] "de"))

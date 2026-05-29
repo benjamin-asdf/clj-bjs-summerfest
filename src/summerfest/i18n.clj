@@ -32,7 +32,7 @@
 30169 Hannover"
     :event/photo-alt "Sommerfest"
     :event/host-alt "Dein Gastgeber"
-    :event/invite "Ihr seid herzlich zu meinem Sommerfestle eingeladen. Ein kleines Sit-in — auf gut Schwäbisch: eine Hocketse — unterm Zeltdach, an Bierbänken im Hannoveraner Innenhof, mit veganem Essen, kalter Mate und viel Zeit. Mitbringen müsst ihr nichts außer euch selbst; Kuchen oder ähnlicher Nachtisch ist immer willkommen."
+    :event/invite "Ihr seid herzlich zu meinem Sommerfestle eingeladen. Ein kleines Sit-in — auf gut Schwäbisch: eine Hocketse — unterm Zeltdach, an Bierbänken im Hannoveraner Innenhof, mit veganem Essen, kalter Mate und viel Zeit. Mitbringen müsst ihr nichts außer euch selbst; Kuchen oder ähnlicher Nachtisch ist immer willkommen. Falls ihr Sonntag noch in Hannover seid: wir machen was zusammen. Sagt einfach Bescheid."
 
     ;; RSVP
     :rsvp/heading "Kommst du?"
@@ -171,7 +171,7 @@ Auf dem Emmerberge 8
 30169 Hannover"
     :event/photo-alt "Summer Fest"
     :event/host-alt "Your host"
-    :event/invite "You're warmly invited to my Sommerfestle. A little sit-in — or, in Swabian: a Hocketse — under a tent, on beer benches in a Hannover courtyard garden, with vegan food, cold Mate and plenty of time. Bring nothing but yourselves; cake or any kind of dessert is always welcome."
+    :event/invite "You're warmly invited to my Sommerfestle. A little sit-in — or, in Swabian: a Hocketse — under a tent, on beer benches in a Hannover courtyard garden, with vegan food, cold Mate and plenty of time. Bring nothing but yourselves; cake or any kind of dessert is always welcome. If you're still in Hannover on Sunday: let's do something together. Just let me know."
 
     ;; RSVP
     :rsvp/heading "Are you coming?"

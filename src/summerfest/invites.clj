@@ -264,23 +264,53 @@
   (or (System/getenv "PUBLIC_BASE_URL")
       "https://benjamin-schwerdtner.de/summerfest"))
 
+(defn- read-extra-cols
+  "Read `tsv-path` if it exists and return {name -> \"<TAB>extras...\"} so the
+   admin's hand-maintained columns past the +1 Link (e.g. a `send?` flag)
+   survive a regen. Matching is by the Name column verbatim — renamed rows
+   lose their annotation."
+  [tsv-path]
+  (let [f (clojure.java.io/file tsv-path)]
+    (when (.exists f)
+      (->> (str/split-lines (slurp f))
+           (drop 1)
+           (keep (fn [line]
+                   (let [cells (str/split line #"\t" -1)]
+                     (when (and (>= (count cells) 4) (seq (first cells)))
+                       [(first cells)
+                        (str "\t" (str/join "\t" (drop 3 cells)))]))))
+           (into {})))))
+
 (defn export-invites-tsv!
   "Read the current Invites tab and write a TSV at `tsv-path` with one row per
    (primary, secondary) pair that has both tokens minted. Columns:
-     Name<TAB>Primary Link<TAB>+1 Link
-   `base-url` is prefixed onto each `/login?token=…` URL. Returns the number
-   of pairs written. No-op (and returns nil) when sheets isn't configured."
+     Name<TAB>Primary Link<TAB>+1 Link[<TAB>extras...]
+   `base-url` is prefixed onto each `/login?token=…` URL. Any extra columns
+   present in the existing file at `tsv-path` (e.g. a hand-maintained `send?`
+   flag) are carried over by Name match. Returns the number of pairs written.
+   No-op (and returns nil) when sheets isn't configured."
   ([] (export-invites-tsv! "invites.tsv" default-public-base-url))
   ([tsv-path] (export-invites-tsv! tsv-path default-public-base-url))
   ([tsv-path base-url]
    (when-let [rows (sheets/fetch-tab invites-tab)]
-     (let [pairs (partition-all 2 (drop 1 rows))
-           link (fn [tok] (str base-url "/login?token=" tok))
+     (let [extras (read-extra-cols tsv-path)
+           pairs (partition-all 2 (drop 1 rows))
+           link (fn [tok lang]
+                  (str base-url "/login?token=" tok
+                       ;; "de" is the default, so we leave it implicit; any
+                       ;; other set value (e.g. "en") rides along on the URL
+                       ;; so the link auto-flips the language toggle.
+                       (when (and (seq lang) (not= lang "de"))
+                         (str "&lang=" lang))))
            lines (for [[p s] pairs
                        :let [p-tok (cell p 3)
-                             s-tok (cell s 3)]
+                             s-tok (cell s 3)
+                             p-lang (effective-lang (cell p 1) nil)
+                             s-lang (effective-lang (cell s 1) p-lang)
+                             name (cell p 0)]
                        :when (and (seq p-tok) (seq s-tok))]
-                   (str (cell p 0) "\t" (link p-tok) "\t" (link s-tok)))
+                   (str name "\t" (link p-tok p-lang) "\t" (link s-tok s-lang)
+                        (get extras name "")))
            out (str "Name\tPrimary Link\t+1 Link\n"
                     (str/join "\n" lines))]
        (spit tsv-path out)

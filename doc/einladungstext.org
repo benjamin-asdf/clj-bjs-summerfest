@@ -1,0 +1,119 @@
+* Einladungstext-Brainstorm
+
+Ort: Einladungs-Card auf der Startseite, unter "Wann / Wo".
+Constraints aus Knowledge Base:
+- ~30 Gäste, Innenhof-Garten Hannover Südstadt
+- Vegan, Mate + alkoholfreies Bier
+- Zelt + Bierbank-Garnituren (mehrere, keine durchgehende Tafel)
+- 08.08.2026, ab 13:00, Essen ab 14:30
+- Ton: warm, playful, schwäbisches "Festle"
+- Kuchen-Mitbringen willkommen, aber kein Muss
+
+* FINAL (Florins Mischung aus G + E, Kuchen erweitert)
+
+Ihr seid herzlich zu meinem Sommerfestle eingeladen. Ein kleines Sit-in
+— auf gut Schwäbisch: eine Hocketse — unterm Zeltdach, an Bierbänken
+im Hannoveraner Innenhof, mit veganem Essen, kalter Mate und viel
+Zeit. Mitbringen müsst ihr nichts außer euch selbst; Kuchen oder
+ähnlicher Nachtisch ist immer willkommen.
+
+* Variante A — knapp, "Hocketse" pur
+
+Ihr seid herzlich zu meiner Sommerfestle-Hocketse im Garten eingeladen —
+Zelt steht, Bierbänke stehen. Für Speis und Trank ist gesorgt; Kuchen
+darf gern mit, ist aber kein Muss.
+
+* Variante B — warm, körperlich-humorvoll
+
+Ihr seid herzlich zu meinem Sommerfestle eingeladen — eine Hocketse im
+Innenhof-Garten, mit Zelt überm Kopf und Bierbänken unterm Hintern.
+Für veganes Essen und kühle Getränke ist gesorgt. Mitbringen müsst ihr
+nichts; wer mag, darf gern einen Kuchen beisteuern.
+
+* Variante C — spielerisch, ausführlicher
+
+Ihr seid herzlich zu meinem Sommerfestle eingeladen: eine kleine
+Hocketse im Garten, mit Zelt, Bierbank-Garnituren und viel Zeit zum
+Trödeln. Speis und Trank übernehme ich — falls jemand spontan einen
+Kuchen mitbringt, sagt natürlich niemand nein.
+
+* Variante D — sehr knapp, aufzählend
+
+Ihr seid herzlich eingeladen zu meinem Sommerfestle — Hocketse im
+Garten, Zelt und Bierbänke stehen, Mate und alkoholfreies Bier sind
+kalt. Kuchen jederzeit willkommen, aber kein Muss.
+
+* Variante E — Sit-in + Hocketse als Wortspiel
+
+Ihr seid herzlich zu meinem Sommerfestle-Sit-in im Garten eingeladen —
+auf gut Schwäbisch: eine Hocketse, mit Zelt und Bierbänken. Für Speis
+und Trank ist gesorgt; Kuchen darf gern mit.
+
+* Variante F — persönlich, Du-Anrede
+
+Schön, dass du da bist! Mein Sommerfestle ist eine entspannte Hocketse
+im Innenhof-Garten — Zelt für jedes Wetter, Bierbänke fürs lange
+Sitzen, veganes Buffet, kühle Mate. Bring einfach dich selbst mit; ein
+Kuchen findet immer Abnehmer, ist aber kein Muss.
+
+* Variante G — sehr poetisch / einladend
+
+Ihr seid herzlich zu meinem Sommerfestle eingeladen. Eine kleine
+Hocketse unterm Zeltdach, an Bierbänken im Hannoveraner Innenhof —
+mit veganem Essen, kalter Mate und viel Zeit. Mitbringen müsst ihr
+nichts außer euch selbst; Kuchen ist immer willkommen.
+
+* Variante H — telegrammartig / Plakat-Stil
+
+Sommerfestle. Hocketse im Garten. Zelt steht, Bierbänke stehen, Essen
+und Getränke auch. Ihr bringt nur euch selbst mit — Kuchen darf gern,
+muss aber nicht.
+
+* Variante I — augenzwinkernd, klein
+
+Ihr seid herzlich zu meiner Sommerfestle-Hocketse eingeladen. Zelt und
+Bierbänke warten im Garten, Speis und Trank ist gesorgt. Wer Lust auf
+Backen hat: Kuchen sind nie zu viele.
+
+* Variante J — drei-Sätze-Rhythmus
+
+Ihr seid herzlich eingeladen. Sommerfestle-Hocketse im Innenhof-Garten
+— Zelt überm Kopf, Bierbänke unterm Hintern, veganes Buffet auf dem
+Tisch. Kuchen-Mitbringsel sind willkommen, aber kein Muss.
+
+* Bausteine zum freien Mischen
+
+** Setting
+
+- "Innenhof-Garten" / "Hannoveraner Innenhof" / "Garten in der Südstadt"
+- "Hocketse" / "Sit-in" / "kleines Beisammensein" / "Garten-Sitzung"
+
+** Zelt + Bänke
+
+- nüchtern: "Zelt, Bierbänke, Garten"
+- körperlich: "Zelt überm Kopf, Bierbänke unterm Hintern"
+- bildhaft: "unterm Zeltdach, an den Bierbänken"
+- funktional: "Zelt für jedes Wetter, Bierbänke für alle"
+- knapp: "Zelt steht, Bänke stehen, Essen steht"
+
+** Essen/Trinken
+
+- "Für Speis und Trank ist gesorgt"
+- "veganes Buffet, kühle Mate"
+- "Mate und alkoholfreies Bier sind kalt"
+- "veganes Essen und kühle Getränke"
+
+** Kuchen-Klausel
+
+- formell: "wer mag, darf gern einen Kuchen beisteuern"
+- locker: "Kuchen darf gern mit, ist aber kein Muss"
+- spielerisch: "falls jemand spontan einen Kuchen mitbringt, sagt natürlich niemand nein"
+- knapp: "Kuchen jederzeit willkommen, aber kein Muss"
+- bäcker-spezifisch: "Wer Lust auf Backen hat: Kuchen sind nie zu viele"
+
+** Mitbringsel-Negation
+
+- "Mitbringen müsst ihr nichts"
+- "Bringt einfach euch selbst mit"
+- "Ihr bringt nur euch selbst mit"
+- "Mitbringen brauchst du nichts"
